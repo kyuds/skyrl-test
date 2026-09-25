@@ -5,6 +5,8 @@
 # local vLLM servers and the student on $OPD_NUM_STUDENT_GPUS colocated GPUs. AIME24 (the blog's eval,
 # env aime) and a GSM8K slice (env gsm8k, from the parquet's env_class column) are both evaluated.
 # Sourced by 03/04; each sets RUN_NAME and the batch shape before calling opd_run "$@".
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_locate.sh"; opd_locate || exit 1
+: "${OPD_STUDENT_MODEL:?source 00_env.sh first (it selects the pair)}"
 DATA="${OPD_DATA:-$HOME/data}"
 TRAIN_FILE="$DATA/dapo/dapo-math-17k-cleaned.parquet"
 AIME_FILE="$DATA/dapo/aime-2024-cleaned.parquet"
@@ -41,6 +43,7 @@ opd_run() {
     curl -sf "$u/v1/models" >/dev/null || { echo "teacher not reachable at $u; run: bash skyrl-test/opd-4xh100/02_serve_teacher.sh --pair ${OPD_PAIR}"; exit 1; }
   done
   refuse_gpu_collision "${OPD_STUDENT_GPUS:-2,3}"
+  cd "$SKYRL_DIR"   # uv resolves the project (and its extras) from the cwd
   CUDA_VISIBLE_DEVICES="${OPD_STUDENT_GPUS:-2,3}" \
   uv run --isolated --extra fsdp -m skyrl.train.entrypoints.main_opd \
     data.train_data="['$TRAIN_FILE']" \

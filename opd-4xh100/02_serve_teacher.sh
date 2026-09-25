@@ -19,6 +19,8 @@
 # that matter for a vLLM teacher: the model is served, and max_model_len covers
 # max_prompt_length (2048) + max_generate_length (8192) + 1.
 set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/_locate.sh"; opd_locate || exit 1
+cd "$SKYRL_DIR"   # uv resolves the project (vllm lives in its fsdp extra) from the cwd
 
 PAIR="${OPD_PAIR:-base}"; MODEL=""; GPUS_CSV="${OPD_TEACHER_GPUS:-0,1}"; PORT_BASE=""; ACTION="start"
 LOGS="${OPD_LOGS:-$HOME/logs}"

@@ -1,9 +1,11 @@
-# Source this on the 4xH100 node, from the SkyRL checkout, on the PR branch:
-#   git checkout kyuds/opd-entrypoint && OPD_PAIR=base source skyrl-test/opd-4xh100/00_env.sh
-# Checks the branch, uv, the GPUs and the W&B key; exports the knobs the other scripts read.
-# Never prints the key.
-[[ -f skyrl/train/entrypoints/main_opd.py ]] || {
-  echo "skyrl/train/entrypoints/main_opd.py is missing: check out the OPD branch (git checkout kyuds/opd-entrypoint)"; return 1 2>/dev/null || exit 1; }
+# Source this on the 4xH100 node, from anywhere:
+#   OPD_PAIR=post source skyrl-test/opd-4xh100/00_env.sh
+# Finds the SkyRL checkout next to this kit (<root>/SkyRL beside <root>/skyrl-test, or the kit cloned
+# inside SkyRL/; SKYRL_DIR overrides), requires it to be on the PR branch (kyuds/opd-entrypoint), and
+# checks uv, the GPUs and the W&B key; exports the knobs the other scripts read. Never prints the key.
+[[ -n "${BASH_VERSION:-}" ]] || { echo "source this file from bash (it uses BASH_SOURCE to find itself)"; return 1 2>/dev/null || exit 1; }
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_locate.sh"
+opd_locate || return 1 2>/dev/null || exit 1
 : "${WANDB_API_KEY:?export WANDB_API_KEY first}"
 
 # Ray workers get the same uv environment the driver runs in (install doc's "configure Ray to use uv").
@@ -39,7 +41,8 @@ export OPD_PROJECT="${OPD_PROJECT:-opd_4xh100}"
 export OPD_LOGS="${OPD_LOGS:-$HOME/logs}"
 mkdir -p "$OPD_LOGS"
 
-echo "branch  : $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD)"
+echo "kit     : $OPD_KIT_DIR"
+echo "skyrl   : $SKYRL_DIR @ $(git -C "$SKYRL_DIR" rev-parse --abbrev-ref HEAD) $(git -C "$SKYRL_DIR" rev-parse --short HEAD)"
 echo "uv      : $(uv --version 2>/dev/null || echo MISSING)"
 echo "gpus    :"; nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader 2>/dev/null || echo "  nvidia-smi failed"
 echo "pair    : $OPD_PAIR  student=$OPD_STUDENT_MODEL  teacher=$OPD_TEACHER_MODEL  thinking=$OPD_THINKING"

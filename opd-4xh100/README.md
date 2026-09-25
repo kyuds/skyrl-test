@@ -32,15 +32,21 @@ student's generation, so the teacher gets two GPUs and still sets the pace of an
 
 All commands run from the SkyRL checkout root on the node, on the PR branch.
 
-**0. One-time setup.**
+**0. One-time setup.** Two checkouts under one root, side by side (the node's `~/default/kyuds/`):
+the SkyRL repo on the PR branch, and the public `kyuds/skyrl-test` repo that carries this kit. The
+scripts find SkyRL next to the kit (or around it, if `skyrl-test` is cloned inside `SkyRL/` as the
+workspace rules say); `SKYRL_DIR=/path/to/SkyRL` overrides the search. Every script `cd`s into SkyRL
+itself before calling `uv`, so the commands below work from any directory.
 ```
-git clone <SkyRL remote> && cd SkyRL && git checkout kyuds/opd-entrypoint
+cd ~/default/kyuds
+git clone <SkyRL remote> && (cd SkyRL && git checkout kyuds/opd-entrypoint)
 git clone https://github.com/kyuds/skyrl-test.git                       # these scripts; later: git -C skyrl-test pull
 export WANDB_API_KEY=...                                                # never printed by the scripts
 ```
 
-**1. Environment.** Checks the branch (refuses on `main`), `uv`, the four GPUs and the key; exports the
-`OPD_*` knobs (`post` pair, 9B teacher, GPUs 0,1 teacher / 2,3 student, thinking off).
+**1. Environment.** Finds the SkyRL checkout and refuses unless it has the OPD entrypoint (i.e. is on
+the PR branch), checks `uv`, the four GPUs and the key; exports the `OPD_*` knobs (`post` pair, 9B
+teacher, GPUs 0,1 teacher / 2,3 student, thinking off) plus `SKYRL_DIR` and `OPD_KIT_DIR`.
 ```
 OPD_PAIR=post source skyrl-test/opd-4xh100/00_env.sh
 ```
@@ -65,8 +71,9 @@ W&B: every `opd/*` key present, reverse KL fell, exposed teacher time a small fr
 eval improved (the last two can legitimately fail on three tiny steps; the first two must pass).
 ```
 bash skyrl-test/opd-4xh100/03_run_opd_smoke.sh
-uv run --isolated --extra fsdp skyrl-test/opd-4xh100/check_opd_run.py --project opd_4xh100 --run_name "$(cat ~/logs/last_opd_run)"
+(cd "$SKYRL_DIR" && uv run --isolated --extra fsdp "$OPD_KIT_DIR/check_opd_run.py" --project opd_4xh100 --run_name "$(cat ~/logs/last_opd_run)")
 ```
+`uv run` has to execute inside the SkyRL project (its environment holds `wandb`), hence the `cd`.
 This is the first live exercise of the vLLM teacher path (the `prompt_logprobs` wire format was
 verified against SkyRL's own parser, not a live server), so a failure here is most likely there; the
 teacher logs and the trainer's error name the request.
@@ -76,7 +83,7 @@ The run name is printed and saved to `~/logs/last_opd_run`. If it is interrupted
 `OPD_RUN_NAME=<that name>` and it resumes from the last checkpoint.
 ```
 bash skyrl-test/opd-4xh100/04_run_opd.sh                          # OPD_MAX_STEPS=N to change the cap
-uv run --isolated --extra fsdp skyrl-test/opd-4xh100/check_opd_run.py --project opd_4xh100 --run_name "$(cat ~/logs/last_opd_run)"
+(cd "$SKYRL_DIR" && uv run --isolated --extra fsdp "$OPD_KIT_DIR/check_opd_run.py" --project opd_4xh100 --run_name "$(cat ~/logs/last_opd_run)")
 ```
 
 **6. Stop the teacher, then the GRPO baseline.** Same student, prompts, evals, batch shape and lengths;
@@ -87,7 +94,7 @@ Smoke it first the same way.
 ```
 bash skyrl-test/opd-4xh100/02_serve_teacher.sh --pair post --stop
 bash skyrl-test/opd-4xh100/05_run_grpo.sh --smoke
-uv run --isolated --extra fsdp skyrl-test/opd-4xh100/check_opd_run.py --grpo --project opd_4xh100 --run_name "$(cat ~/logs/last_grpo_run)"
+(cd "$SKYRL_DIR" && uv run --isolated --extra fsdp "$OPD_KIT_DIR/check_opd_run.py" --grpo --project opd_4xh100 --run_name "$(cat ~/logs/last_grpo_run)")
 bash skyrl-test/opd-4xh100/05_run_grpo.sh                         # GRPO_MAX_STEPS=N to change the cap
 ```
 `GRPO_GPUS=2,3 GRPO_NUM_GPUS=2` runs it on the OPD student's GPUs instead, for a like-for-like
@@ -96,8 +103,8 @@ bash skyrl-test/opd-4xh100/05_run_grpo.sh                         # GRPO_MAX_STE
 **7. Compare.** Both runs' eval scores per eval step, side by side, with the rollouts consumed at each
 step (the post's axis: OPD reached in ~20 steps what RL reached in ~200) and mean step times.
 ```
-uv run --isolated --extra fsdp skyrl-test/opd-4xh100/compare_runs.py --project opd_4xh100 \
-    --run opd="$(cat ~/logs/last_opd_run)" --run grpo="$(cat ~/logs/last_grpo_run)"
+(cd "$SKYRL_DIR" && uv run --isolated --extra fsdp "$OPD_KIT_DIR/compare_runs.py" --project opd_4xh100 \
+    --run opd="$(cat ~/logs/last_opd_run)" --run grpo="$(cat ~/logs/last_grpo_run)")
 ```
 
 **8. Later, the Base pair.** Same steps with `OPD_PAIR=base` in step 1 (teacher `Qwen3.5-9B-Base` on
@@ -130,6 +137,7 @@ ports 8000–8001, student `Qwen3.5-0.8B-Base`).
 | `OPD_MAX_STEPS` / `GRPO_MAX_STEPS` | `40` / `200` | step caps |
 | `GRPO_GPUS` / `GRPO_NUM_GPUS` | `0,1,2,3` / `4` | GRPO's GPUs |
 | `OPD_PROJECT` / `OPD_DATA` / `OPD_LOGS` | `opd_4xh100` / `~/data` / `~/logs` | W&B project, data root, logs and manifests |
+| `SKYRL_DIR` | found next to (or around) the kit | the SkyRL checkout; set it if the layout differs |
 
 Every run script forwards extra `key=value` overrides to the entrypoint, e.g.
 `bash 04_run_opd.sh trainer.algorithm.opd.use_task_reward=true` for the mixed variant. Dict overrides
@@ -155,7 +163,7 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 
 `00_env.sh` env and knobs · `01_prepare_data.sh` data and caches · `02_serve_teacher.sh` teacher launcher
 (`--pair`, `--model`, `--gpus`, `--port-base`, `--status`, `--stop`, `--stop-all`) · `03_run_opd_smoke.sh` ·
-`04_run_opd.sh` · `05_run_grpo.sh` (`--smoke`) · `_common.sh` shared flags and guards · `check_opd_run.py`
+`04_run_opd.sh` · `05_run_grpo.sh` (`--smoke`) · `_common.sh` shared flags and guards · `_locate.sh` finds SkyRL · `check_opd_run.py`
 (`--grpo`) · `compare_runs.py` · `slice_parquet.py`.
 
 ## Next, after these runs

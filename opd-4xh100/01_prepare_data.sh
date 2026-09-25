@@ -7,7 +7,9 @@
 set -euo pipefail
 DATA="${OPD_DATA:-$HOME/data}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
+source "$HERE/_locate.sh"; opd_locate || exit 1
 GSM8K_EVAL_ROWS="${GSM8K_EVAL_ROWS:-256}"
+cd "$SKYRL_DIR"   # the example scripts and uv's project live here
 
 DATA_DIR="$DATA/dapo" bash examples/train/algorithms/dapo/prepare_dapo_data.sh
 ls -la "$DATA/dapo"/*cleaned*.parquet
