@@ -1,0 +1,631 @@
+# Output of skyrl-test/wandb_step_semantics.py, run 2026-09-10 on wandb 0.28.1 (SkyRL/.venv), entity sky-posttraining-uc-berkeley
+# Section 1: terminal WARNING lines wandb printed during each run.  Section 2: read-back of every run through the public API.
+
+## 1. terminal warnings per scenario
+04-same-step-after-commit: wandb: WARNING Tried to log to step 0 that is less than the current step 1. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 1 that is less than the current step 2. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 2 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 3 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 4 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 5 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 6 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+04-same-step-after-commit: wandb: WARNING Tried to log to step 7 that is less than the current step 8. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+07-backwards-before-any-commit: wandb: WARNING Tried to log to step 5 that is less than the current step 10. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 0 that is less than the current step 2. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 1 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 2 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 3 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 4 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 5 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+08-async-eval-step-kwarg: wandb: WARNING Tried to log to step 6 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+09-async-eval-no-step-kwarg: wandb: WARNING Tried to log to step 2 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+09-async-eval-no-step-kwarg: wandb: WARNING Tried to log to step 3 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+09-async-eval-no-step-kwarg: wandb: WARNING Tried to log to step 4 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+09-async-eval-no-step-kwarg: wandb: WARNING Tried to log to step 5 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+09-async-eval-no-step-kwarg: wandb: WARNING Tried to log to step 6 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+09-async-eval-no-step-kwarg: wandb: WARNING Tried to log to step 7 that is less than the current step 8. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+12-define-metric-with-step-kwarg: wandb: WARNING Tried to log to step 0 that is less than the current step 2. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+12-define-metric-with-step-kwarg: wandb: WARNING Tried to log to step 1 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+12-define-metric-with-step-kwarg: wandb: WARNING Tried to log to step 2 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+12-define-metric-with-step-kwarg: wandb: WARNING Tried to log to step 3 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+12-define-metric-with-step-kwarg: wandb: WARNING Tried to log to step 4 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+12-define-metric-with-step-kwarg: wandb: WARNING Tried to log to step 5 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+13-define-metric-hybrid-open-row: wandb: WARNING Tried to log to step 2 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+13-define-metric-hybrid-open-row: wandb: WARNING Tried to log to step 3 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+13-define-metric-hybrid-open-row: wandb: WARNING Tried to log to step 4 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+13-define-metric-hybrid-open-row: wandb: WARNING Tried to log to step 5 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+13-define-metric-hybrid-open-row: wandb: WARNING Tried to log to step 6 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+13-define-metric-hybrid-open-row: wandb: WARNING Tried to log to step 7 that is less than the current step 8. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+
+## 2. read-back
+all runs finished; waiting 10s for the backend to settle before reading back
+
+========================================================================================
+01-monotonic   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/v69p7qe2
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 8
+  _step=0   train/loss=0
+  _step=1   train/loss=1
+  _step=2   train/loss=2
+  _step=3   train/loss=3
+  _step=4   train/loss=4
+  _step=5   train/loss=5
+  _step=6   train/loss=6
+  _step=7   train/loss=7
+writes:
+  log({'train/loss': 0}, step=0)                                 x=0   -> landed at _step=0
+  log({'train/loss': 1}, step=1)                                 x=1   -> landed at _step=1
+  log({'train/loss': 2}, step=2)                                 x=2   -> landed at _step=2
+  log({'train/loss': 3}, step=3)                                 x=3   -> landed at _step=3
+  log({'train/loss': 4}, step=4)                                 x=4   -> landed at _step=4
+  log({'train/loss': 5}, step=5)                                 x=5   -> landed at _step=5
+  log({'train/loss': 6}, step=6)                                 x=6   -> landed at _step=6
+  log({'train/loss': 7}, step=7)                                 x=7   -> landed at _step=7
+dropped: 0/8
+summary: {'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+02-same-step-two-keys   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/lw8zu54x
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   eval/acc=0  train/loss=0
+  _step=1   eval/acc=1  train/loss=1
+  _step=2   eval/acc=2  train/loss=2
+  _step=3   eval/acc=3  train/loss=3
+  _step=4   eval/acc=4  train/loss=4
+  _step=5   eval/acc=5  train/loss=5
+  _step=6   eval/acc=6  train/loss=6
+  _step=7   eval/acc=7  train/loss=7
+writes:
+  log({'train/loss': 0}, step=0)                                 x=0   -> landed at _step=0
+  log({'eval/acc': 0}, step=0)                                   x=0   -> landed at _step=0
+  log({'train/loss': 1}, step=1)                                 x=1   -> landed at _step=1
+  log({'eval/acc': 1}, step=1)                                   x=1   -> landed at _step=1
+  log({'train/loss': 2}, step=2)                                 x=2   -> landed at _step=2
+  log({'eval/acc': 2}, step=2)                                   x=2   -> landed at _step=2
+  log({'train/loss': 3}, step=3)                                 x=3   -> landed at _step=3
+  log({'eval/acc': 3}, step=3)                                   x=3   -> landed at _step=3
+  log({'train/loss': 4}, step=4)                                 x=4   -> landed at _step=4
+  log({'eval/acc': 4}, step=4)                                   x=4   -> landed at _step=4
+  log({'train/loss': 5}, step=5)                                 x=5   -> landed at _step=5
+  log({'eval/acc': 5}, step=5)                                   x=5   -> landed at _step=5
+  log({'train/loss': 6}, step=6)                                 x=6   -> landed at _step=6
+  log({'eval/acc': 6}, step=6)                                   x=6   -> landed at _step=6
+  log({'train/loss': 7}, step=7)                                 x=7   -> landed at _step=7
+  log({'eval/acc': 7}, step=7)                                   x=7   -> landed at _step=7
+dropped: 0/16
+summary: {'eval/acc': 7, 'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+03-same-step-same-key-twice   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/0i1ybv7m
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   train/loss=200
+  _step=1   train/loss=201
+  _step=2   train/loss=202
+  _step=3   train/loss=203
+  _step=4   train/loss=204
+  _step=5   train/loss=205
+  _step=6   train/loss=206
+  _step=7   train/loss=207
+writes:
+  log({'train/loss': 100}, step=0)                               x=0   -> DROPPED   [first write]
+  log({'train/loss': 200}, step=0)                               x=0   -> landed at _step=0   [second write]
+  log({'train/loss': 101}, step=1)                               x=1   -> DROPPED   [first write]
+  log({'train/loss': 201}, step=1)                               x=1   -> landed at _step=1   [second write]
+  log({'train/loss': 102}, step=2)                               x=2   -> DROPPED   [first write]
+  log({'train/loss': 202}, step=2)                               x=2   -> landed at _step=2   [second write]
+  log({'train/loss': 103}, step=3)                               x=3   -> DROPPED   [first write]
+  log({'train/loss': 203}, step=3)                               x=3   -> landed at _step=3   [second write]
+  log({'train/loss': 104}, step=4)                               x=4   -> DROPPED   [first write]
+  log({'train/loss': 204}, step=4)                               x=4   -> landed at _step=4   [second write]
+  log({'train/loss': 105}, step=5)                               x=5   -> DROPPED   [first write]
+  log({'train/loss': 205}, step=5)                               x=5   -> landed at _step=5   [second write]
+  log({'train/loss': 106}, step=6)                               x=6   -> DROPPED   [first write]
+  log({'train/loss': 206}, step=6)                               x=6   -> landed at _step=6   [second write]
+  log({'train/loss': 107}, step=7)                               x=7   -> DROPPED   [first write]
+  log({'train/loss': 207}, step=7)                               x=7   -> landed at _step=7   [second write]
+dropped: 8/16
+summary: {'train/loss': 207}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+04-same-step-after-commit   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/kxiqzex5
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   train/loss=0
+  _step=1   train/loss=1
+  _step=2   train/loss=2
+  _step=3   train/loss=3
+  _step=4   train/loss=4
+  _step=5   train/loss=5
+  _step=6   train/loss=6
+  _step=7   train/loss=7
+writes:
+  log({'train/loss': 0}, step=0, commit=True)                    x=0   -> landed at _step=0
+  log({'eval/acc': 0}, step=0)                                   x=0   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 1}, step=1, commit=True)                    x=1   -> landed at _step=1
+  log({'eval/acc': 1}, step=1)                                   x=1   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 2}, step=2, commit=True)                    x=2   -> landed at _step=2
+  log({'eval/acc': 2}, step=2)                                   x=2   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 3}, step=3, commit=True)                    x=3   -> landed at _step=3
+  log({'eval/acc': 3}, step=3)                                   x=3   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 4}, step=4, commit=True)                    x=4   -> landed at _step=4
+  log({'eval/acc': 4}, step=4)                                   x=4   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 5}, step=5, commit=True)                    x=5   -> landed at _step=5
+  log({'eval/acc': 5}, step=5)                                   x=5   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 6}, step=6, commit=True)                    x=6   -> landed at _step=6
+  log({'eval/acc': 6}, step=6)                                   x=6   -> DROPPED   [same step, after commit=True]
+  log({'train/loss': 7}, step=7, commit=True)                    x=7   -> landed at _step=7
+  log({'eval/acc': 7}, step=7)                                   x=7   -> DROPPED   [same step, after commit=True]
+dropped: 8/16
+summary: {'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+05-step-plus-commit-false   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/458z9akh
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   eval/acc=0  train/loss=0
+  _step=1   eval/acc=1  train/loss=1
+  _step=2   eval/acc=2  train/loss=2
+  _step=3   eval/acc=3  train/loss=3
+  _step=4   eval/acc=4  train/loss=4
+  _step=5   eval/acc=5  train/loss=5
+  _step=6   eval/acc=6  train/loss=6
+  _step=7   eval/acc=7  train/loss=7
+writes:
+  log({'train/loss': 0}, step=0, commit=False)                   x=0   -> landed at _step=0
+  log({'eval/acc': 0}, step=0, commit=False)                     x=0   -> landed at _step=0
+  log({'train/loss': 1}, step=1, commit=False)                   x=1   -> landed at _step=1
+  log({'eval/acc': 1}, step=1, commit=False)                     x=1   -> landed at _step=1
+  log({'train/loss': 2}, step=2, commit=False)                   x=2   -> landed at _step=2
+  log({'eval/acc': 2}, step=2, commit=False)                     x=2   -> landed at _step=2
+  log({'train/loss': 3}, step=3, commit=False)                   x=3   -> landed at _step=3
+  log({'eval/acc': 3}, step=3, commit=False)                     x=3   -> landed at _step=3
+  log({'train/loss': 4}, step=4, commit=False)                   x=4   -> landed at _step=4
+  log({'eval/acc': 4}, step=4, commit=False)                     x=4   -> landed at _step=4
+  log({'train/loss': 5}, step=5, commit=False)                   x=5   -> landed at _step=5
+  log({'eval/acc': 5}, step=5, commit=False)                     x=5   -> landed at _step=5
+  log({'train/loss': 6}, step=6, commit=False)                   x=6   -> landed at _step=6
+  log({'eval/acc': 6}, step=6, commit=False)                     x=6   -> landed at _step=6
+  log({'train/loss': 7}, step=7, commit=False)                   x=7   -> landed at _step=7
+  log({'eval/acc': 7}, step=7, commit=False)                     x=7   -> landed at _step=7
+dropped: 0/16
+summary: {'eval/acc': 7, 'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+06-gaps   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/jciyrnxa
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 8
+  _step=0   train/loss=0
+  _step=10  train/loss=10
+  _step=20  train/loss=20
+  _step=30  train/loss=30
+  _step=40  train/loss=40
+  _step=50  train/loss=50
+  _step=60  train/loss=60
+  _step=70  train/loss=70
+writes:
+  log({'train/loss': 0}, step=0)                                 x=0   -> landed at _step=0
+  log({'train/loss': 10}, step=10)                               x=10  -> landed at _step=10
+  log({'train/loss': 20}, step=20)                               x=20  -> landed at _step=20
+  log({'train/loss': 30}, step=30)                               x=30  -> landed at _step=30
+  log({'train/loss': 40}, step=40)                               x=40  -> landed at _step=40
+  log({'train/loss': 50}, step=50)                               x=50  -> landed at _step=50
+  log({'train/loss': 60}, step=60)                               x=60  -> landed at _step=60
+  log({'train/loss': 70}, step=70)                               x=70  -> landed at _step=70
+dropped: 0/8
+summary: {'train/loss': 70}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+07-backwards-before-any-commit   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/vbbofbmf
+----------------------------------------------------------------------------------------
+rows landed: 1   writes issued: 3
+  _step=10  eval/acc=10  train/loss=10
+writes:
+  log({'train/loss': 10}, step=10)                               x=10  -> landed at _step=10
+  log({'eval/acc': 5}, step=5)                                   x=5   -> DROPPED   [below the open step, nothing committed yet]
+  log({'eval/acc': 10}, step=10)                                 x=10  -> landed at _step=10   [equal to the open step]
+dropped: 1/3
+summary: {'eval/acc': 10, 'train/loss': 10}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+08-async-eval-step-kwarg   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/rzrw4aa2
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   train/loss=0
+  _step=1   train/loss=1
+  _step=2   train/loss=2
+  _step=3   train/loss=3
+  _step=4   train/loss=4
+  _step=5   train/loss=5
+  _step=6   train/loss=6
+  _step=7   eval/acc=7  train/loss=7
+writes:
+  log({'train/loss': 0}, step=0)                                 x=0   -> landed at _step=0
+  log({'train/loss': 1}, step=1)                                 x=1   -> landed at _step=1
+  log({'train/loss': 2}, step=2)                                 x=2   -> landed at _step=2
+  log({'eval/acc': 0}, step=0)                                   x=0   -> DROPPED   [arrives after train step 2]
+  log({'train/loss': 3}, step=3)                                 x=3   -> landed at _step=3
+  log({'eval/acc': 1}, step=1)                                   x=1   -> DROPPED   [arrives after train step 3]
+  log({'train/loss': 4}, step=4)                                 x=4   -> landed at _step=4
+  log({'eval/acc': 2}, step=2)                                   x=2   -> DROPPED   [arrives after train step 4]
+  log({'train/loss': 5}, step=5)                                 x=5   -> landed at _step=5
+  log({'eval/acc': 3}, step=3)                                   x=3   -> DROPPED   [arrives after train step 5]
+  log({'train/loss': 6}, step=6)                                 x=6   -> landed at _step=6
+  log({'eval/acc': 4}, step=4)                                   x=4   -> DROPPED   [arrives after train step 6]
+  log({'train/loss': 7}, step=7)                                 x=7   -> landed at _step=7
+  log({'eval/acc': 5}, step=5)                                   x=5   -> DROPPED   [arrives after train step 7]
+  log({'eval/acc': 6}, step=6)                                   x=6   -> DROPPED   [tail eval, training already ended]
+  log({'eval/acc': 7}, step=7)                                   x=7   -> landed at _step=7   [tail eval, training already ended]
+dropped: 7/16
+summary: {'eval/acc': 7, 'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+09-async-eval-no-step-kwarg   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/d43xsh6y
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 22
+  _step=0   train/grad_norm=0  train/loss=0
+  _step=1   train/grad_norm=1  train/loss=1
+  _step=2   eval/acc=0  train/loss=2
+  _step=3   eval/acc=1  train/loss=3
+  _step=4   eval/acc=2  train/loss=4
+  _step=5   eval/acc=3  train/loss=5
+  _step=6   eval/acc=4  train/loss=6
+  _step=7   eval/acc=5  train/loss=7
+writes:
+  log({'train/loss': 0}, step=0)                                 x=0   -> landed at _step=0
+  log({'train/grad_norm': 0}, step=0)                            x=0   -> landed at _step=0   [second trainer write for the same step]
+  log({'train/loss': 1}, step=1)                                 x=1   -> landed at _step=1
+  log({'train/grad_norm': 1}, step=1)                            x=1   -> landed at _step=1   [second trainer write for the same step]
+  log({'train/loss': 2}, step=2)                                 x=2   -> landed at _step=2
+  log({'eval/acc': 0})                                           x=0   -> landed at _step=2   <-- MISATTRIBUTED (belongs to x=0)   [no step=, arrives after train step 2]
+  log({'train/grad_norm': 2}, step=2)                            x=2   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 3}, step=3)                                 x=3   -> landed at _step=3
+  log({'eval/acc': 1})                                           x=1   -> landed at _step=3   <-- MISATTRIBUTED (belongs to x=1)   [no step=, arrives after train step 3]
+  log({'train/grad_norm': 3}, step=3)                            x=3   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 4}, step=4)                                 x=4   -> landed at _step=4
+  log({'eval/acc': 2})                                           x=2   -> landed at _step=4   <-- MISATTRIBUTED (belongs to x=2)   [no step=, arrives after train step 4]
+  log({'train/grad_norm': 4}, step=4)                            x=4   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 5}, step=5)                                 x=5   -> landed at _step=5
+  log({'eval/acc': 3})                                           x=3   -> landed at _step=5   <-- MISATTRIBUTED (belongs to x=3)   [no step=, arrives after train step 5]
+  log({'train/grad_norm': 5}, step=5)                            x=5   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 6}, step=6)                                 x=6   -> landed at _step=6
+  log({'eval/acc': 4})                                           x=4   -> landed at _step=6   <-- MISATTRIBUTED (belongs to x=4)   [no step=, arrives after train step 6]
+  log({'train/grad_norm': 6}, step=6)                            x=6   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 7}, step=7)                                 x=7   -> landed at _step=7
+  log({'eval/acc': 5})                                           x=5   -> landed at _step=7   <-- MISATTRIBUTED (belongs to x=5)   [no step=, arrives after train step 7]
+  log({'train/grad_norm': 7}, step=7)                            x=7   -> DROPPED   [second trainer write for the same step]
+dropped: 6/22
+summary: {'eval/acc': 5, 'train/grad_norm': 1, 'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+10-async-eval-step-latest   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/7ud6p7mz
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 14
+  _step=0   train/loss=0
+  _step=1   train/loss=1
+  _step=2   eval/acc=0  train/loss=2
+  _step=3   eval/acc=1  train/loss=3
+  _step=4   eval/acc=2  train/loss=4
+  _step=5   eval/acc=3  train/loss=5
+  _step=6   eval/acc=4  train/loss=6
+  _step=7   eval/acc=5  train/loss=7
+writes:
+  log({'train/loss': 0}, step=0)                                 x=0   -> landed at _step=0
+  log({'train/loss': 1}, step=1)                                 x=1   -> landed at _step=1
+  log({'train/loss': 2}, step=2)                                 x=2   -> landed at _step=2
+  log({'eval/acc': 0}, step=2)                                   x=0   -> landed at _step=2   <-- MISATTRIBUTED (belongs to x=0)   [eval of step 0 logged with step=2]
+  log({'train/loss': 3}, step=3)                                 x=3   -> landed at _step=3
+  log({'eval/acc': 1}, step=3)                                   x=1   -> landed at _step=3   <-- MISATTRIBUTED (belongs to x=1)   [eval of step 1 logged with step=3]
+  log({'train/loss': 4}, step=4)                                 x=4   -> landed at _step=4
+  log({'eval/acc': 2}, step=4)                                   x=2   -> landed at _step=4   <-- MISATTRIBUTED (belongs to x=2)   [eval of step 2 logged with step=4]
+  log({'train/loss': 5}, step=5)                                 x=5   -> landed at _step=5
+  log({'eval/acc': 3}, step=5)                                   x=3   -> landed at _step=5   <-- MISATTRIBUTED (belongs to x=3)   [eval of step 3 logged with step=5]
+  log({'train/loss': 6}, step=6)                                 x=6   -> landed at _step=6
+  log({'eval/acc': 4}, step=6)                                   x=4   -> landed at _step=6   <-- MISATTRIBUTED (belongs to x=4)   [eval of step 4 logged with step=6]
+  log({'train/loss': 7}, step=7)                                 x=7   -> landed at _step=7
+  log({'eval/acc': 5}, step=7)                                   x=5   -> landed at _step=7   <-- MISATTRIBUTED (belongs to x=5)   [eval of step 5 logged with step=7]
+dropped: 0/14
+summary: {'eval/acc': 5, 'train/loss': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+11-define-metric-no-step-kwarg   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/2hu7ja76
+----------------------------------------------------------------------------------------
+rows landed: 16   writes issued: 16
+  _step=0   train/loss=0  trainer/global_step=0
+  _step=1   train/loss=1  trainer/global_step=1
+  _step=2   train/loss=2  trainer/global_step=2
+  _step=3   eval/acc=0  trainer/global_step=0
+  _step=4   train/loss=3  trainer/global_step=3
+  _step=5   eval/acc=1  trainer/global_step=1
+  _step=6   train/loss=4  trainer/global_step=4
+  _step=7   eval/acc=2  trainer/global_step=2
+  _step=8   train/loss=5  trainer/global_step=5
+  _step=9   eval/acc=3  trainer/global_step=3
+  _step=10  train/loss=6  trainer/global_step=6
+  _step=11  eval/acc=4  trainer/global_step=4
+  _step=12  train/loss=7  trainer/global_step=7
+  _step=13  eval/acc=5  trainer/global_step=5
+  _step=14  eval/acc=6  trainer/global_step=6
+  _step=15  eval/acc=7  trainer/global_step=7
+writes:
+  log({'train/loss': 0, 'trainer/global_step': 0}, commit=True)  x=0   -> landed at _step=0 trainer/global_step=0
+  log({'train/loss': 1, 'trainer/global_step': 1}, commit=True)  x=1   -> landed at _step=1 trainer/global_step=1
+  log({'train/loss': 2, 'trainer/global_step': 2}, commit=True)  x=2   -> landed at _step=2 trainer/global_step=2
+  log({'eval/acc': 0, 'trainer/global_step': 0}, commit=True)    x=0   -> landed at _step=3 trainer/global_step=0   [arrives after train step 2]
+  log({'train/loss': 3, 'trainer/global_step': 3}, commit=True)  x=3   -> landed at _step=4 trainer/global_step=3
+  log({'eval/acc': 1, 'trainer/global_step': 1}, commit=True)    x=1   -> landed at _step=5 trainer/global_step=1   [arrives after train step 3]
+  log({'train/loss': 4, 'trainer/global_step': 4}, commit=True)  x=4   -> landed at _step=6 trainer/global_step=4
+  log({'eval/acc': 2, 'trainer/global_step': 2}, commit=True)    x=2   -> landed at _step=7 trainer/global_step=2   [arrives after train step 4]
+  log({'train/loss': 5, 'trainer/global_step': 5}, commit=True)  x=5   -> landed at _step=8 trainer/global_step=5
+  log({'eval/acc': 3, 'trainer/global_step': 3}, commit=True)    x=3   -> landed at _step=9 trainer/global_step=3   [arrives after train step 5]
+  log({'train/loss': 6, 'trainer/global_step': 6}, commit=True)  x=6   -> landed at _step=10 trainer/global_step=6
+  log({'eval/acc': 4, 'trainer/global_step': 4}, commit=True)    x=4   -> landed at _step=11 trainer/global_step=4   [arrives after train step 6]
+  log({'train/loss': 7, 'trainer/global_step': 7}, commit=True)  x=7   -> landed at _step=12 trainer/global_step=7
+  log({'eval/acc': 5, 'trainer/global_step': 5}, commit=True)    x=5   -> landed at _step=13 trainer/global_step=5   [arrives after train step 7]
+  log({'eval/acc': 6, 'trainer/global_step': 6}, commit=True)    x=6   -> landed at _step=14 trainer/global_step=6   [tail eval, training already ended]
+  log({'eval/acc': 7, 'trainer/global_step': 7}, commit=True)    x=7   -> landed at _step=15 trainer/global_step=7   [tail eval, training already ended]
+dropped: 0/16
+summary: {'eval/acc': 7, 'train/loss': 7, 'trainer/global_step': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+12-define-metric-with-step-kwarg   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/ans6o0rq
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 14
+  _step=0   train/loss=0  trainer/global_step=0
+  _step=1   train/loss=1  trainer/global_step=1
+  _step=2   train/loss=2  trainer/global_step=2
+  _step=3   train/loss=3  trainer/global_step=3
+  _step=4   train/loss=4  trainer/global_step=4
+  _step=5   train/loss=5  trainer/global_step=5
+  _step=6   train/loss=6  trainer/global_step=6
+  _step=7   train/loss=7  trainer/global_step=7
+writes:
+  log({'train/loss': 0, 'trainer/global_step': 0}, step=0)       x=0   -> landed at _step=0 trainer/global_step=0
+  log({'train/loss': 1, 'trainer/global_step': 1}, step=1)       x=1   -> landed at _step=1 trainer/global_step=1
+  log({'train/loss': 2, 'trainer/global_step': 2}, step=2)       x=2   -> landed at _step=2 trainer/global_step=2
+  log({'eval/acc': 0, 'trainer/global_step': 0}, step=0)         x=0   -> DROPPED   [arrives after train step 2]
+  log({'train/loss': 3, 'trainer/global_step': 3}, step=3)       x=3   -> landed at _step=3 trainer/global_step=3
+  log({'eval/acc': 1, 'trainer/global_step': 1}, step=1)         x=1   -> DROPPED   [arrives after train step 3]
+  log({'train/loss': 4, 'trainer/global_step': 4}, step=4)       x=4   -> landed at _step=4 trainer/global_step=4
+  log({'eval/acc': 2, 'trainer/global_step': 2}, step=2)         x=2   -> DROPPED   [arrives after train step 4]
+  log({'train/loss': 5, 'trainer/global_step': 5}, step=5)       x=5   -> landed at _step=5 trainer/global_step=5
+  log({'eval/acc': 3, 'trainer/global_step': 3}, step=3)         x=3   -> DROPPED   [arrives after train step 5]
+  log({'train/loss': 6, 'trainer/global_step': 6}, step=6)       x=6   -> landed at _step=6 trainer/global_step=6
+  log({'eval/acc': 4, 'trainer/global_step': 4}, step=4)         x=4   -> DROPPED   [arrives after train step 6]
+  log({'train/loss': 7, 'trainer/global_step': 7}, step=7)       x=7   -> landed at _step=7 trainer/global_step=7
+  log({'eval/acc': 5, 'trainer/global_step': 5}, step=5)         x=5   -> DROPPED   [arrives after train step 7]
+dropped: 6/14
+summary: {'train/loss': 7, 'trainer/global_step': 7}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+13-define-metric-hybrid-open-row   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/yr0tfyk2
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 22
+  _step=0   train/grad_norm=0  train/loss=0  trainer/global_step=0
+  _step=1   train/grad_norm=1  train/loss=1  trainer/global_step=1
+  _step=2   eval/acc=0  train/loss=2  trainer/global_step=0
+  _step=3   eval/acc=1  train/loss=3  trainer/global_step=1
+  _step=4   eval/acc=2  train/loss=4  trainer/global_step=2
+  _step=5   eval/acc=3  train/loss=5  trainer/global_step=3
+  _step=6   eval/acc=4  train/loss=6  trainer/global_step=4
+  _step=7   eval/acc=5  train/loss=7  trainer/global_step=5
+writes:
+  log({'train/loss': 0, 'trainer/global_step': 0}, step=0, commit=False) x=0   -> landed at _step=0 trainer/global_step=0
+  log({'train/grad_norm': 0, 'trainer/global_step': 0}, step=0, commit=False) x=0   -> landed at _step=0 trainer/global_step=0   [second trainer write for the same step]
+  log({'train/loss': 1, 'trainer/global_step': 1}, step=1, commit=False) x=1   -> landed at _step=1 trainer/global_step=1
+  log({'train/grad_norm': 1, 'trainer/global_step': 1}, step=1, commit=False) x=1   -> landed at _step=1 trainer/global_step=1   [second trainer write for the same step]
+  log({'train/loss': 2, 'trainer/global_step': 2}, step=2, commit=False) x=2   -> landed at _step=2 trainer/global_step=0   <-- MISATTRIBUTED (belongs to x=2)
+  log({'eval/acc': 0, 'trainer/global_step': 0})                 x=0   -> landed at _step=2 trainer/global_step=0   [no step=, arrives while train row 2 is open]
+  log({'train/grad_norm': 2, 'trainer/global_step': 2}, step=2, commit=False) x=2   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 3, 'trainer/global_step': 3}, step=3, commit=False) x=3   -> landed at _step=3 trainer/global_step=1   <-- MISATTRIBUTED (belongs to x=3)
+  log({'eval/acc': 1, 'trainer/global_step': 1})                 x=1   -> landed at _step=3 trainer/global_step=1   [no step=, arrives while train row 3 is open]
+  log({'train/grad_norm': 3, 'trainer/global_step': 3}, step=3, commit=False) x=3   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 4, 'trainer/global_step': 4}, step=4, commit=False) x=4   -> landed at _step=4 trainer/global_step=2   <-- MISATTRIBUTED (belongs to x=4)
+  log({'eval/acc': 2, 'trainer/global_step': 2})                 x=2   -> landed at _step=4 trainer/global_step=2   [no step=, arrives while train row 4 is open]
+  log({'train/grad_norm': 4, 'trainer/global_step': 4}, step=4, commit=False) x=4   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 5, 'trainer/global_step': 5}, step=5, commit=False) x=5   -> landed at _step=5 trainer/global_step=3   <-- MISATTRIBUTED (belongs to x=5)
+  log({'eval/acc': 3, 'trainer/global_step': 3})                 x=3   -> landed at _step=5 trainer/global_step=3   [no step=, arrives while train row 5 is open]
+  log({'train/grad_norm': 5, 'trainer/global_step': 5}, step=5, commit=False) x=5   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 6, 'trainer/global_step': 6}, step=6, commit=False) x=6   -> landed at _step=6 trainer/global_step=4   <-- MISATTRIBUTED (belongs to x=6)
+  log({'eval/acc': 4, 'trainer/global_step': 4})                 x=4   -> landed at _step=6 trainer/global_step=4   [no step=, arrives while train row 6 is open]
+  log({'train/grad_norm': 6, 'trainer/global_step': 6}, step=6, commit=False) x=6   -> DROPPED   [second trainer write for the same step]
+  log({'train/loss': 7, 'trainer/global_step': 7}, step=7, commit=False) x=7   -> landed at _step=7 trainer/global_step=5   <-- MISATTRIBUTED (belongs to x=7)
+  log({'eval/acc': 5, 'trainer/global_step': 5})                 x=5   -> landed at _step=7 trainer/global_step=5   [no step=, arrives while train row 7 is open]
+  log({'train/grad_norm': 7, 'trainer/global_step': 7}, step=7, commit=False) x=7   -> DROPPED   [second trainer write for the same step]
+dropped: 6/22
+summary: {'eval/acc': 5, 'train/grad_norm': 1, 'train/loss': 7, 'trainer/global_step': 5}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+14-summary-out-of-order   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/i7kqomju
+----------------------------------------------------------------------------------------
+rows landed: 24   writes issued: 24
+  _step=0   eval/acc=0  trainer/global_step=0
+  _step=1   eval/acc_summary_max=0  trainer/global_step=0
+  _step=2   eval/acc_override=0  trainer/global_step=0
+  _step=3   eval/acc=1  trainer/global_step=1
+  _step=4   eval/acc_summary_max=1  trainer/global_step=1
+  _step=5   eval/acc_override=1  trainer/global_step=1
+  _step=6   eval/acc=2  trainer/global_step=2
+  _step=7   eval/acc_summary_max=2  trainer/global_step=2
+  _step=8   eval/acc_override=2  trainer/global_step=2
+  _step=9   eval/acc=3  trainer/global_step=3
+  _step=10  eval/acc_summary_max=3  trainer/global_step=3
+  _step=11  eval/acc_override=3  trainer/global_step=3
+  _step=12  eval/acc=4  trainer/global_step=4
+  _step=13  eval/acc_summary_max=4  trainer/global_step=4
+  _step=14  eval/acc_override=4  trainer/global_step=4
+  _step=15  eval/acc=6  trainer/global_step=6
+  _step=16  eval/acc_summary_max=6  trainer/global_step=6
+  _step=17  eval/acc_override=6  trainer/global_step=6
+  _step=18  eval/acc=7  trainer/global_step=7
+  _step=19  eval/acc_summary_max=7  trainer/global_step=7
+  _step=20  eval/acc_override=7  trainer/global_step=7
+  _step=21  eval/acc=5  trainer/global_step=5
+  _step=22  eval/acc_summary_max=5  trainer/global_step=5
+  _step=23  eval/acc_override=5  trainer/global_step=5
+writes:
+  log({'eval/acc': 0, 'trainer/global_step': 0}, commit=True)    x=0   -> landed at _step=0 trainer/global_step=0
+  log({'eval/acc_summary_max': 0, 'trainer/global_step': 0}, commit=True) x=0   -> landed at _step=1 trainer/global_step=0
+  log({'eval/acc_override': 0, 'trainer/global_step': 0}, commit=True) x=0   -> landed at _step=2 trainer/global_step=0
+  log({'eval/acc': 1, 'trainer/global_step': 1}, commit=True)    x=1   -> landed at _step=3 trainer/global_step=1
+  log({'eval/acc_summary_max': 1, 'trainer/global_step': 1}, commit=True) x=1   -> landed at _step=4 trainer/global_step=1
+  log({'eval/acc_override': 1, 'trainer/global_step': 1}, commit=True) x=1   -> landed at _step=5 trainer/global_step=1
+  log({'eval/acc': 2, 'trainer/global_step': 2}, commit=True)    x=2   -> landed at _step=6 trainer/global_step=2
+  log({'eval/acc_summary_max': 2, 'trainer/global_step': 2}, commit=True) x=2   -> landed at _step=7 trainer/global_step=2
+  log({'eval/acc_override': 2, 'trainer/global_step': 2}, commit=True) x=2   -> landed at _step=8 trainer/global_step=2
+  log({'eval/acc': 3, 'trainer/global_step': 3}, commit=True)    x=3   -> landed at _step=9 trainer/global_step=3
+  log({'eval/acc_summary_max': 3, 'trainer/global_step': 3}, commit=True) x=3   -> landed at _step=10 trainer/global_step=3
+  log({'eval/acc_override': 3, 'trainer/global_step': 3}, commit=True) x=3   -> landed at _step=11 trainer/global_step=3
+  log({'eval/acc': 4, 'trainer/global_step': 4}, commit=True)    x=4   -> landed at _step=12 trainer/global_step=4
+  log({'eval/acc_summary_max': 4, 'trainer/global_step': 4}, commit=True) x=4   -> landed at _step=13 trainer/global_step=4
+  log({'eval/acc_override': 4, 'trainer/global_step': 4}, commit=True) x=4   -> landed at _step=14 trainer/global_step=4
+  log({'eval/acc': 6, 'trainer/global_step': 6}, commit=True)    x=6   -> landed at _step=15 trainer/global_step=6
+  log({'eval/acc_summary_max': 6, 'trainer/global_step': 6}, commit=True) x=6   -> landed at _step=16 trainer/global_step=6
+  log({'eval/acc_override': 6, 'trainer/global_step': 6}, commit=True) x=6   -> landed at _step=17 trainer/global_step=6
+  log({'eval/acc': 7, 'trainer/global_step': 7}, commit=True)    x=7   -> landed at _step=18 trainer/global_step=7
+  log({'eval/acc_summary_max': 7, 'trainer/global_step': 7}, commit=True) x=7   -> landed at _step=19 trainer/global_step=7
+  log({'eval/acc_override': 7, 'trainer/global_step': 7}, commit=True) x=7   -> landed at _step=20 trainer/global_step=7
+  log({'eval/acc': 5, 'trainer/global_step': 5}, commit=True)    x=5   -> landed at _step=21 trainer/global_step=5
+  log({'eval/acc_summary_max': 5, 'trainer/global_step': 5}, commit=True) x=5   -> landed at _step=22 trainer/global_step=5
+  log({'eval/acc_override': 5, 'trainer/global_step': 5}, commit=True) x=5   -> landed at _step=23 trainer/global_step=5
+dropped: 0/24
+summary: {'eval/acc': 5, 'eval/acc_override': 7, 'eval/acc_summary_max.max': 7, 'trainer/global_step': 5}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+project: https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics
+
+## 3. addendum, same day: scenarios 15-17 (same key twice at the same step, commit combinations)
+### terminal warnings per scenario
+15-same-key-both-commit: wandb: WARNING Tried to log to step 0 that is less than the current step 1. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 1 that is less than the current step 2. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 2 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 3 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 4 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 5 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 6 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+15-same-key-both-commit: wandb: WARNING Tried to log to step 7 that is less than the current step 8. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 0 that is less than the current step 1. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 1 that is less than the current step 2. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 2 that is less than the current step 3. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 3 that is less than the current step 4. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 4 that is less than the current step 5. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 5 that is less than the current step 6. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 6 that is less than the current step 7. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+16-same-key-commit-first-only: wandb: WARNING Tried to log to step 7 that is less than the current step 8. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+### read-back
+all runs finished; waiting 10s for the backend to settle before reading back
+
+========================================================================================
+15-same-key-both-commit   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/ujarr9x3
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   train/loss=100
+  _step=1   train/loss=101
+  _step=2   train/loss=102
+  _step=3   train/loss=103
+  _step=4   train/loss=104
+  _step=5   train/loss=105
+  _step=6   train/loss=106
+  _step=7   train/loss=107
+writes:
+  log({'train/loss': 100}, step=0, commit=True)                  x=0   -> landed at _step=0   [first write, commit=True]
+  log({'train/loss': 200}, step=0, commit=True)                  x=0   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 101}, step=1, commit=True)                  x=1   -> landed at _step=1   [first write, commit=True]
+  log({'train/loss': 201}, step=1, commit=True)                  x=1   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 102}, step=2, commit=True)                  x=2   -> landed at _step=2   [first write, commit=True]
+  log({'train/loss': 202}, step=2, commit=True)                  x=2   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 103}, step=3, commit=True)                  x=3   -> landed at _step=3   [first write, commit=True]
+  log({'train/loss': 203}, step=3, commit=True)                  x=3   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 104}, step=4, commit=True)                  x=4   -> landed at _step=4   [first write, commit=True]
+  log({'train/loss': 204}, step=4, commit=True)                  x=4   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 105}, step=5, commit=True)                  x=5   -> landed at _step=5   [first write, commit=True]
+  log({'train/loss': 205}, step=5, commit=True)                  x=5   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 106}, step=6, commit=True)                  x=6   -> landed at _step=6   [first write, commit=True]
+  log({'train/loss': 206}, step=6, commit=True)                  x=6   -> DROPPED   [second write, commit=True]
+  log({'train/loss': 107}, step=7, commit=True)                  x=7   -> landed at _step=7   [first write, commit=True]
+  log({'train/loss': 207}, step=7, commit=True)                  x=7   -> DROPPED   [second write, commit=True]
+dropped: 8/16
+summary: {'train/loss': 107}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+16-same-key-commit-first-only   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/r1bhsoyd
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   train/loss=100
+  _step=1   train/loss=101
+  _step=2   train/loss=102
+  _step=3   train/loss=103
+  _step=4   train/loss=104
+  _step=5   train/loss=105
+  _step=6   train/loss=106
+  _step=7   train/loss=107
+writes:
+  log({'train/loss': 100}, step=0, commit=True)                  x=0   -> landed at _step=0   [first write, commit=True]
+  log({'train/loss': 200}, step=0)                               x=0   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 101}, step=1, commit=True)                  x=1   -> landed at _step=1   [first write, commit=True]
+  log({'train/loss': 201}, step=1)                               x=1   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 102}, step=2, commit=True)                  x=2   -> landed at _step=2   [first write, commit=True]
+  log({'train/loss': 202}, step=2)                               x=2   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 103}, step=3, commit=True)                  x=3   -> landed at _step=3   [first write, commit=True]
+  log({'train/loss': 203}, step=3)                               x=3   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 104}, step=4, commit=True)                  x=4   -> landed at _step=4   [first write, commit=True]
+  log({'train/loss': 204}, step=4)                               x=4   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 105}, step=5, commit=True)                  x=5   -> landed at _step=5   [first write, commit=True]
+  log({'train/loss': 205}, step=5)                               x=5   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 106}, step=6, commit=True)                  x=6   -> landed at _step=6   [first write, commit=True]
+  log({'train/loss': 206}, step=6)                               x=6   -> DROPPED   [second write, no commit kwarg]
+  log({'train/loss': 107}, step=7, commit=True)                  x=7   -> landed at _step=7   [first write, commit=True]
+  log({'train/loss': 207}, step=7)                               x=7   -> DROPPED   [second write, no commit kwarg]
+dropped: 8/16
+summary: {'train/loss': 107}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+========================================================================================
+17-same-key-commit-second-only   https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics/runs/f0ch2nx7
+----------------------------------------------------------------------------------------
+rows landed: 8   writes issued: 16
+  _step=0   train/loss=200
+  _step=1   train/loss=201
+  _step=2   train/loss=202
+  _step=3   train/loss=203
+  _step=4   train/loss=204
+  _step=5   train/loss=205
+  _step=6   train/loss=206
+  _step=7   train/loss=207
+writes:
+  log({'train/loss': 100}, step=0)                               x=0   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 200}, step=0, commit=True)                  x=0   -> landed at _step=0   [second write, commit=True]
+  log({'train/loss': 101}, step=1)                               x=1   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 201}, step=1, commit=True)                  x=1   -> landed at _step=1   [second write, commit=True]
+  log({'train/loss': 102}, step=2)                               x=2   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 202}, step=2, commit=True)                  x=2   -> landed at _step=2   [second write, commit=True]
+  log({'train/loss': 103}, step=3)                               x=3   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 203}, step=3, commit=True)                  x=3   -> landed at _step=3   [second write, commit=True]
+  log({'train/loss': 104}, step=4)                               x=4   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 204}, step=4, commit=True)                  x=4   -> landed at _step=4   [second write, commit=True]
+  log({'train/loss': 105}, step=5)                               x=5   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 205}, step=5, commit=True)                  x=5   -> landed at _step=5   [second write, commit=True]
+  log({'train/loss': 106}, step=6)                               x=6   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 206}, step=6, commit=True)                  x=6   -> landed at _step=6   [second write, commit=True]
+  log({'train/loss': 107}, step=7)                               x=7   -> DROPPED   [first write, no commit kwarg]
+  log({'train/loss': 207}, step=7, commit=True)                  x=7   -> landed at _step=7   [second write, commit=True]
+dropped: 8/16
+summary: {'train/loss': 207}
+wandb-core 'less than the current step' warnings in local logs: 0
+
+project: https://wandb.ai/sky-posttraining-uc-berkeley/wandb-step-semantics
