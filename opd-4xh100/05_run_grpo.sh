@@ -30,7 +30,7 @@ refuse_gpu_collision "$GPUS"
 echo "$RUN_NAME" > "${OPD_LOGS:-$HOME/logs}/last_grpo_run"
 echo "run_name=$RUN_NAME  pair=${OPD_PAIR}  student=${OPD_STUDENT_MODEL}  gpus=${GPUS}  thinking=${OPD_THINKING:-false}"
 cd "$SKYRL_DIR"
-CUDA_VISIBLE_DEVICES="$GPUS" \
+RAY_ADDRESS=local CUDA_VISIBLE_DEVICES="$GPUS" \
 uv run --isolated --extra fsdp -m skyrl.train.entrypoints.main_base \
   data.train_data="['$TRAIN_FILE']" \
   data.val_data="['$AIME_FILE','$GSM8K_FILE']" \

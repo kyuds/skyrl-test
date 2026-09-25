@@ -31,7 +31,9 @@ export OPD_THINKING="${OPD_THINKING:-false}"
 # teacher is the step's bottleneck and gets two GPUs; two data-parallel student ranks also make the
 # blog's batch of 512 exact (with 3 ranks and n=16 it would have to be a multiple of 3). The run scripts
 # find the teacher through the per-pair manifest 02_serve_teacher.sh writes and refuse to start on a GPU
-# a running teacher holds. Ports: base 8000+, post 8100+ unless overridden.
+# a running teacher holds. Ports: base 8000+, post 8100+ unless overridden. SkyRL learns the split only
+# through CUDA_VISIBLE_DEVICES, so each run starts its own Ray instance (RAY_ADDRESS=local in the run
+# scripts) instead of joining a cluster that is already up and has all four GPUs registered.
 export OPD_TEACHER_GPUS="${OPD_TEACHER_GPUS:-0,1}"
 export OPD_STUDENT_GPUS="${OPD_STUDENT_GPUS:-2,3}"
 export OPD_NUM_STUDENT_GPUS="${OPD_NUM_STUDENT_GPUS:-2}"

@@ -57,9 +57,13 @@ and the HF cache for `Qwen3.5-0.8B` and `Qwen3.5-9B` (19 GB). Run once.
 bash skyrl-test/opd-4xh100/01_prepare_data.sh
 ```
 
-**3. Serve the teacher.** One `vllm serve` per GPU on 0 and 1 (ports 8100, 8101), waits until both
-answer `/v1/models`, checks the served id and that `max_model_len` ≥ 2048 + 8192 + 1 (the branch has
-no preflight checks yet), and writes the manifest the run scripts read. Logs in `~/logs/teacher_post_gpu*.log`.
+**3. Serve the teacher.** One `vllm serve` per GPU on 0 and 1 (ports 8100, 8101), prints a line a
+minute while the 9B model loads, then checks that each server answers `/v1/models` with the right id
+and a `max_model_len` ≥ 2048 + 8192 + 1 (the branch has no preflight checks yet). The manifest the run
+scripts read is written at launch; re-running the script leaves servers that already answer alone and
+just re-checks them, so it is safe after an interrupted run. Logs in `~/logs/teacher_post_gpu*.log`.
+`--stop` signals each server's process group and waits until its port stops answering, so the GPUs
+are really free for the next step.
 ```
 bash skyrl-test/opd-4xh100/02_serve_teacher.sh --pair post
 bash skyrl-test/opd-4xh100/02_serve_teacher.sh --status          # UP/DOWN per URL, any time
@@ -151,10 +155,17 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
   to give the curves signal. Per-dataset keys are `eval/<data_source>/avg_score`.
 - **GRPO on four GPUs, OPD student on two.** Steps and rollouts are the comparison axis, not wall
   clock; set `GRPO_GPUS=2,3 GRPO_NUM_GPUS=2` if wall clock is the question.
+- **Each run starts its own Ray instance** (`RAY_ADDRESS=local` in `_common.sh` and `05_run_grpo.sh`),
+  so Ray registers only the GPUs in `CUDA_VISIBLE_DEVICES` and the student gets exactly those. Joining
+  a cluster that is already up (an Anyscale workspace's, started with all four GPUs) would ignore the
+  variable: Ray does not know about vLLM processes it did not launch and would place the student on
+  GPUs 0,1 under the teacher. Verified 2026-09-25 against a fake 4-GPU `ray start` cluster: a joining
+  driver with `CUDA_VISIBLE_DEVICES=2,3` got GPU 0; with `RAY_ADDRESS=local` it got GPU 2.
 - **Not verified on a GPU:** anything. What has been verified: every script's generated argument list
   parses and passes `validate_cfg` (and `validate_opd_cfg`) on the branch for this exact configuration,
-  the launcher writes the manifests the run scripts read, and the GPU-collision guard refuses a
-  student on a GPU a running teacher holds. The 9B checkpoints and tokenizer hashes were checked on HF.
+  the launcher's start / status / re-run / stop flow and its failure path against a stub server that
+  answers `/v1/models`, and the GPU-collision guard refusing a student on a GPU a running teacher
+  holds. The 9B checkpoints and tokenizer hashes were checked on HF.
 - **If vLLM 0.28 rejects `prompt_logprobs` with prefix caching on**, add `--no-enable-prefix-caching`
   to the `vllm serve` line in `02_serve_teacher.sh`; not expected on this version.
 - **If the teacher OOMs at startup**, lower `--max-num-seqs` in `02_serve_teacher.sh` (128 per server).

@@ -44,7 +44,12 @@ opd_run() {
   done
   refuse_gpu_collision "${OPD_STUDENT_GPUS:-2,3}"
   cd "$SKYRL_DIR"   # uv resolves the project (and its extras) from the cwd
-  CUDA_VISIBLE_DEVICES="${OPD_STUDENT_GPUS:-2,3}" \
+  # RAY_ADDRESS=local: the run starts its own Ray instance, which registers only the GPUs in
+  # CUDA_VISIBLE_DEVICES and hands the student exactly those. Without it, ray.init() joins any cluster
+  # already running on the node (an Anyscale workspace's, started with all four GPUs) and that cluster
+  # ignores the variable: Ray knows nothing about the vllm processes it did not launch, so it would place
+  # the student on GPUs 0,1 under the teacher. Verified 2026-09-25 against a fake 4-GPU `ray start` cluster.
+  RAY_ADDRESS=local CUDA_VISIBLE_DEVICES="${OPD_STUDENT_GPUS:-2,3}" \
   uv run --isolated --extra fsdp -m skyrl.train.entrypoints.main_opd \
     data.train_data="['$TRAIN_FILE']" \
     data.val_data="['$AIME_FILE','$GSM8K_FILE']" \

@@ -12,14 +12,21 @@
 #
 # Defaults come from the environment 00_env.sh exports (OPD_PAIR, OPD_TEACHER_GPUS, OPD_LOGS) and fall back
 # to base / 0,1 / ~/logs. Each pair has its own default port range (base 8000+, post 8100+) so both can run
-# at once. The URL list is written to $OPD_LOGS/teacher_<pair>.urls and the GPUs to teacher_<pair>.gpus;
-# the run scripts read both (the second to refuse starting a student on a GPU a teacher holds).
+# at once. The URL list is written to $OPD_LOGS/teacher_<pair>.urls and the GPUs to teacher_<pair>.gpus as
+# soon as the servers are launched; the run scripts read both (and refuse to start on a GPU a teacher
+# holds, or against a URL that does not answer). Re-running the script leaves servers that already answer
+# alone and just re-checks them, so it is safe after an interrupted or failed first run.
 #
 # The OPD branch runs no preflight checks yet (see the TODO in main_opd.py), so this script does the two
 # that matter for a vLLM teacher: the model is served, and max_model_len covers
 # max_prompt_length (2048) + max_generate_length (8192) + 1.
+#
+# Each server runs in its own process group (setsid, Linux) so --stop takes down uv, the API server and
+# vLLM's engine process together; --stop then waits until the ports stop answering, because the next
+# thing to run (05_run_grpo.sh on all four GPUs) needs the memory back.
 set -euo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/_locate.sh"; opd_locate || exit 1
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute, because of the cd below
+source "$(dirname "$SELF")/_locate.sh"; opd_locate || exit 1
 cd "$SKYRL_DIR"   # uv resolves the project (vllm lives in its fsdp extra) from the cwd
 
 PAIR="${OPD_PAIR:-base}"; MODEL=""; GPUS_CSV="${OPD_TEACHER_GPUS:-0,1}"; PORT_BASE=""; ACTION="start"
@@ -36,7 +43,7 @@ while [[ $# -gt 0 ]]; do
     --stop) ACTION="stop"; shift ;;
     --stop-all) ACTION="stop-all"; shift ;;
     --status) ACTION="status"; shift ;;
-    -h|--help) sed -n 2,20p "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo pipefail/p' "$SELF" | sed '$d'; exit 0 ;;   # the header comment, whatever its length
     *) echo "unknown argument: $1"; exit 2 ;;
   esac
 done
@@ -49,12 +56,28 @@ IFS=',' read -r -a GPUS <<< "$GPUS_CSV"
 MANIFEST="$LOGS/teacher_${PAIR}.urls"
 mkdir -p "$LOGS"
 
-stop_pair() {  # $1 = pair tag
-  local f
+up() { curl -sf "$1/v1/models" >/dev/null 2>&1; }   # $1 = base URL
+
+stop_pair() {  # $1 = pair tag: signal every server, wait for its port to go quiet, drop the manifest
+  local f pid u port
   for f in "$LOGS"/teacher_"$1"_gpu*.pid; do
     [[ -f "$f" ]] || continue
-    kill "$(cat "$f")" 2>/dev/null && echo "stopped $(basename "$f" .pid) (pid $(cat "$f"))"; rm -f "$f"
+    pid="$(cat "$f")"
+    # the whole process group when the server was launched via setsid, the pid alone otherwise
+    if kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null; then echo "stopping $(basename "$f" .pid) (pid $pid)"; else echo "$(basename "$f" .pid) (pid $pid) was not running"; fi
+    rm -f "$f"
   done
+  if [[ -f "$LOGS/teacher_$1.urls" ]]; then
+    for u in $(tr -d "[]'" < "$LOGS/teacher_$1.urls" | tr ',' ' '); do
+      port="${u##*:}"
+      for _ in $(seq 1 12); do up "$u" || break; sleep 5; done
+      if up "$u"; then   # a server outlived its process (uv did not forward the signal): find it by its port
+        pkill -TERM -f "vllm serve .*--port ${port}( |$)" 2>/dev/null || true
+        for _ in $(seq 1 12); do up "$u" || break; sleep 5; done
+      fi
+      if up "$u"; then echo "WARNING: $u still answers; check nvidia-smi before starting anything on its GPU"; else echo "$u is down"; fi
+    done
+  fi
   rm -f "$LOGS/teacher_$1.urls" "$LOGS/teacher_$1.gpus"
 }
 case "$ACTION" in
@@ -63,7 +86,7 @@ case "$ACTION" in
   status)
     for f in "$LOGS"/teacher_*.urls; do
       [[ -f "$f" ]] || { echo "no teacher manifests in $LOGS"; break; }
-      echo "$(basename "$f" .urls): $(cat "$f")"
+      echo "$(basename "$f" .urls): $(cat "$f")  (GPUs $(cat "${f%.urls}.gpus" 2>/dev/null || echo '?'))"
       for u in $(tr -d "[]'" < "$f" | tr ',' ' '); do
         if body=$(curl -sf "$u/v1/models" 2>/dev/null); then echo "  $u  UP  $(echo "$body" | tr -d '\n' | cut -c1-120)"; else echo "  $u  DOWN"; fi
       done
@@ -71,13 +94,14 @@ case "$ACTION" in
 esac
 
 # ---- start ----
+LAUNCH=(nohup); command -v setsid >/dev/null 2>&1 && LAUNCH=(setsid nohup)
 URLS=()
 for i in "${!GPUS[@]}"; do
   gpu="${GPUS[$i]}"; port=$((PORT_BASE + i)); tag="teacher_${PAIR}_gpu${gpu}"; log="$LOGS/$tag.log"; pid="$LOGS/$tag.pid"
   URLS+=("http://127.0.0.1:${port}")
-  if curl -sf "http://127.0.0.1:${port}/v1/models" >/dev/null 2>&1; then echo "port $port already serving; leaving it"; continue; fi
+  if up "http://127.0.0.1:${port}"; then echo "port $port already serving; leaving it"; continue; fi
   echo "serving $MODEL on GPU $gpu, port $port, max_model_len $MAX_MODEL_LEN; log: $log"
-  CUDA_VISIBLE_DEVICES="$gpu" nohup uv run --isolated --extra fsdp vllm serve "$MODEL" \
+  CUDA_VISIBLE_DEVICES="$gpu" "${LAUNCH[@]}" uv run --isolated --extra fsdp vllm serve "$MODEL" \
     --port "$port" \
     --max-model-len "$MAX_MODEL_LEN" \
     --gpu-memory-utilization 0.90 \
@@ -85,31 +109,34 @@ for i in "${!GPUS[@]}"; do
     > "$log" 2>&1 &
   echo $! > "$pid"
 done
+# Manifest first, so --status and --stop know these ports even if a server never comes up.
+printf "['%s'" "${URLS[0]}" > "$MANIFEST"; for u in "${URLS[@]:1}"; do printf ",'%s'" "$u" >> "$MANIFEST"; done; printf "]\n" >> "$MANIFEST"
+echo "$GPUS_CSV" > "$LOGS/teacher_${PAIR}.gpus"
 
-# Readiness: poll every server's /v1/models (prime-rl's check) for up to 20 minutes.
+# Readiness: poll every server's /v1/models (prime-rl's check) for up to 20 minutes, then check what it
+# serves. The response goes to the checker through the environment: the heredoc is the checker's stdin.
 for i in "${!GPUS[@]}"; do
   gpu="${GPUS[$i]}"; port=$((PORT_BASE + i)); tag="teacher_${PAIR}_gpu${gpu}"; log="$LOGS/$tag.log"; pid="$LOGS/$tag.pid"
-  ready=0
+  ready=0; waited=0
   for _ in $(seq 1 240); do
     if body=$(curl -sf "http://127.0.0.1:${port}/v1/models" 2>/dev/null); then
-      echo "$body" | uv run --isolated --extra fsdp python - "$MODEL" "$REQUIRED" "$port" <<'PY'
-import json, sys
-body = json.load(sys.stdin); model, required, port = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+      BODY="$body" python3 - "$MODEL" "$REQUIRED" "$port" <<'PY'
+import json, os, sys
+body = json.loads(os.environ["BODY"]); model, required, port = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 cards = {c["id"]: c for c in body.get("data", [])}
 if model not in cards:
     sys.exit(f"port {port} does not serve {model!r}; it serves {list(cards)}")
 mml = cards[model].get("max_model_len")
 print(f"teacher ready on port {port}: {model} max_model_len={mml} (need >= {required})")
 if mml is not None and mml < required:
-    sys.exit("max_model_len too small for prompt + response + 1; pass --max-model-len")
+    sys.exit(f"max_model_len {mml} < {required} (prompt + response + 1); restart with --max-model-len {required} or more")
 PY
       ready=1; break
     fi
     if [[ -f "$pid" ]] && ! kill -0 "$(cat "$pid")" 2>/dev/null; then echo "teacher on GPU $gpu exited early; tail of $log:"; tail -30 "$log"; exit 1; fi
-    sleep 5
+    sleep 5; waited=$((waited + 5))
+    (( waited % 60 )) || echo "  waiting for port $port (${waited}s; a 9B model takes a few minutes to load; log: $log)"
   done
   [[ $ready == 1 ]] || { echo "teacher on port $port not ready after 20 min; tail of $log:"; tail -30 "$log"; exit 1; }
 done
-printf "['%s'" "${URLS[0]}" > "$MANIFEST"; for u in "${URLS[@]:1}"; do printf ",'%s'" "$u" >> "$MANIFEST"; done; printf "]\n" >> "$MANIFEST"
-echo "$GPUS_CSV" > "$LOGS/teacher_${PAIR}.gpus"
 echo "teacher '$PAIR' = $MODEL on GPUs $GPUS_CSV at $(cat "$MANIFEST")  (manifest: $MANIFEST)"
