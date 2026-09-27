@@ -73,6 +73,29 @@ knobs (`post` pair, 9B teacher on 2 GPUs, student on 2, thinking off) plus `SKYR
 OPD_PAIR=post source skyrl-test/opd-4xh100/00_env.sh
 ```
 
+**Detached runs.** Every run script below can also be started detached, so a dropped terminal or a
+sleeping laptop does not kill it: `bg.sh` gives the run its own session with hangups ignored, sends
+its output to a log under `~/logs`, and appends a last line with the exit status. Start it from the
+shell where you sourced `00_env.sh`, because the run inherits those exports. For example, instead of
+`bash skyrl-test/opd-4xh100/04_run_grpo.sh --smoke`:
+```
+bash skyrl-test/opd-4xh100/bg.sh 04_run_grpo.sh --smoke
+```
+Follow it (`~/logs/latest.log` always points at the newest detached run; the run is done when a line
+starting with `===` reports its exit status):
+```
+tail -f ~/logs/latest.log
+```
+From any shell, even after reconnecting:
+```
+bash skyrl-test/opd-4xh100/bg.sh --status
+```
+Stop it, which ends its Ray job and frees the GPUs:
+```
+bash skyrl-test/opd-4xh100/bg.sh --stop
+```
+After reconnecting, source `00_env.sh` again before the check commands, which need its exports.
+
 **2. Data and model caches.** DAPO-17k + AIME24 (cleaned, as the post), the GSM8K validation split,
 and the HF cache for `Qwen3.5-0.8B` and `Qwen3.5-9B` (19 GB). Run once. It ends by building the eval set
 (AIME24 + the first 256 GSM8K rows, under `$OPD_DATA/opd-eval`), which every run script also rebuilds.
@@ -220,7 +243,7 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 
 `00_env.sh` env and knobs · `01_prepare_data.sh` data and caches · `02_run_opd_smoke.sh` ·
 `03_run_opd.sh` · `04_run_grpo.sh` (`--smoke`) · `_common.sh` shared flags and the `TEACHER_OPTS` array ·
-`_locate.sh` finds SkyRL · `check_opd_run.py` (`--grpo`) · `compare_runs.py` · `make_eval_set.py` the eval set.
+`_locate.sh` finds SkyRL · `bg.sh` detached runs (`--status`, `--stop`) · `check_opd_run.py` (`--grpo`) · `compare_runs.py` · `make_eval_set.py` the eval set.
 
 ## Next, after these runs
 
