@@ -3,10 +3,10 @@
 # no mini-batching, LR 1e-5, prompt 2048 / response 8192, AIME24 and GSM8K-256 at avg@32 every 5 steps.
 # 40 steps by default (the blog's 1.7B curve flattened by ~20); OPD_MAX_STEPS=N to change. Interrupted?
 # Re-run with OPD_RUN_NAME=<the printed run name>: resume_mode=latest picks up the last checkpoint.
-#   OPD_PAIR=post bash skyrl-test/opd-4xh100/04_run_opd.sh
-#   OPD_PAIR=base bash skyrl-test/opd-4xh100/04_run_opd.sh
-# Each pair reads its own teacher manifest ($OPD_LOGS/teacher_<pair>.urls from 02_serve_teacher.sh), so
-# either serve both teachers at once (one GPU each) or stop and re-serve between the two runs.
+#   OPD_PAIR=post bash skyrl-test/opd-4xh100/03_run_opd.sh
+#   OPD_PAIR=base bash skyrl-test/opd-4xh100/03_run_opd.sh
+# Each run launches its own teacher (OPD_TEACHER_MODEL, on OPD_TEACHER_NUM_GPUS GPUs) and takes it down at
+# the end, so the two pairs simply run one after the other.
 set -euo pipefail
 source "$(dirname "$0")/_common.sh"
 TEACHER_TAG="$(basename "${OPD_TEACHER_MODEL}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')"

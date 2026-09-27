@@ -24,7 +24,7 @@ ap.add_argument("--project", required=True)
 ap.add_argument("--run_name", required=True)
 ap.add_argument("--entity", default=None, help="defaults to the API key's entity")
 ap.add_argument("--max_exposed_fraction", type=float, default=0.25, help="check 3 threshold, teacher_time_exposed / generate")
-ap.add_argument("--grpo", action="store_true", help="a 05_run_grpo.sh baseline: no teacher, so skip the opd/* checks and print the reward metrics")
+ap.add_argument("--grpo", action="store_true", help="a 04_run_grpo.sh baseline: no teacher, so skip the opd/* checks and print the reward metrics")
 a = ap.parse_args()
 
 api = wandb.Api()

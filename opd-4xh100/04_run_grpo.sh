@@ -5,15 +5,16 @@
 # KL loss to the reference model with coef 0.001 (k3), no clip-higher, no overlong filtering or punishment,
 # no dynamic sampling, no zero-variance filter. LR 1e-6 (the blog's RL baseline; 1e-5 was unstable for RL).
 # Mini-batch 32 prompts, i.e. 16 optimizer steps per batch as in the blog's RL baseline; the OPD run has none.
-# Runs on all four GPUs by default (no teacher to feed), so stop the teacher first; it refuses to start on
-# a GPU a running teacher holds. GRPO_GPUS=2,3 GRPO_NUM_GPUS=2 gives the like-for-like wall clock instead.
+# Runs on all four GPUs by default (no teacher to feed), so it needs the node to itself: an OPD run still
+# going holds GPUs in Ray's ledger and this one would wait, then fail on SkyRL's placement-group timeout,
+# which names the shortfall. GRPO_NUM_GPUS=2 gives the like-for-like wall clock with the OPD student instead.
 # 200 steps by default (the blog needed ~200 RL steps for what OPD did in ~20); GRPO_MAX_STEPS=N to change.
 # Interrupted? Re-run with GRPO_RUN_NAME=<the printed run name> to resume from the last checkpoint.
-#   OPD_PAIR=post bash skyrl-test/opd-4xh100/05_run_grpo.sh --smoke   # 3 tiny steps, proves the plumbing
-#   OPD_PAIR=post bash skyrl-test/opd-4xh100/05_run_grpo.sh
+# Needs nothing that is pending: it runs today.
+#   OPD_PAIR=post bash skyrl-test/opd-4xh100/04_run_grpo.sh --smoke   # 3 tiny steps, proves the plumbing
+#   OPD_PAIR=post bash skyrl-test/opd-4xh100/04_run_grpo.sh
 set -euo pipefail
 source "$(dirname "$0")/_common.sh"
-GPUS="${GRPO_GPUS:-0,1,2,3}"
 NUM_GPUS="${GRPO_NUM_GPUS:-4}"
 SMOKE=()
 if [[ "${1:-}" == "--smoke" ]]; then
@@ -26,11 +27,9 @@ if [[ "${1:-}" == "--smoke" ]]; then
 else
   RUN_NAME="${GRPO_RUN_NAME:-grpo_${OPD_PAIR}_0p8b_$(date +%Y%m%d%H%M%S)}"
 fi
-refuse_gpu_collision "$GPUS"
 echo "$RUN_NAME" > "${OPD_LOGS:-$HOME/logs}/last_grpo_run"
-echo "run_name=$RUN_NAME  pair=${OPD_PAIR}  student=${OPD_STUDENT_MODEL}  gpus=${GPUS}  thinking=${OPD_THINKING:-false}"
-cd "$SKYRL_DIR"
-RAY_ADDRESS=local CUDA_VISIBLE_DEVICES="$GPUS" \
+echo "run_name=$RUN_NAME  pair=${OPD_PAIR}  student=${OPD_STUDENT_MODEL}  gpus=${NUM_GPUS}  thinking=${OPD_THINKING:-false}"
+cd "$SKYRL_DIR"   # uv resolves the project (and its extras) from the cwd; the run joins the node's Ray cluster
 uv run --isolated --extra fsdp -m skyrl.train.entrypoints.main_base \
   data.train_data="['$TRAIN_FILE']" \
   data.val_data="['$AIME_FILE','$GSM8K_FILE']" \

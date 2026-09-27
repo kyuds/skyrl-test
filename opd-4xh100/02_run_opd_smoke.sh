@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Stage 0, plumbing: 3 steps of pure OPD on the selected pair, tiny batch, short responses, a 4-sample eval
-# before and after. Proves the Qwen3.5 student trains on FSDP, syncs to its engines, and gets scored by
-# the teacher servers; puts opd/* and timing/* on W&B. Expect well under an hour after the caches are warm.
-#   OPD_PAIR=base bash skyrl-test/opd-4xh100/03_run_opd_smoke.sh
+# before and after. Proves the run brings up its teacher servers, the Qwen3.5 student trains on FSDP, syncs
+# to its engines and gets scored; puts opd/* and timing/* on W&B. Expect well under an hour after the caches
+# are warm (the teacher's model load is part of every run).
+#   OPD_PAIR=post bash skyrl-test/opd-4xh100/02_run_opd_smoke.sh
 set -euo pipefail
 source "$(dirname "$0")/_common.sh"
 RUN_NAME="smoke_${OPD_PAIR}_$(date +%Y%m%d%H%M%S)"

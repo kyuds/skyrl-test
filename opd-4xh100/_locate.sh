@@ -13,7 +13,7 @@ opd_locate() {
   fi
   if [[ -z "${SKYRL_DIR:-}" || ! -f "${SKYRL_DIR}/skyrl/train/entrypoints/main_opd.py" ]]; then
     echo "cannot find the SkyRL checkout with the OPD entrypoint: looked at $up2 and $up2/SkyRL${SKYRL_DIR:+ and SKYRL_DIR=$SKYRL_DIR}." >&2
-    echo "Set SKYRL_DIR to the SkyRL checkout and make sure it is on the OPD branch (git checkout kyuds/opd-entrypoint)." >&2
+    echo "Set SKYRL_DIR to the SkyRL checkout and make sure it is on the OPD branch (git checkout kyuds/opd-teacher-launching)." >&2
     return 1
   fi
   export OPD_KIT_DIR SKYRL_DIR
