@@ -1,5 +1,5 @@
 # Shared flags for the OPD runs. The blog's OPD settings (LR 1e-5, no mini-batching, n=16, temperature 1,
-# eval at top_p 0.7 with 32 samples, 2048/8192 lengths, batched single-turn generation) on the Qwen3.5 pair
+# eval at top_p 0.7 with 32 samples, 2048/8192 lengths, single-turn generation) on the Qwen3.5 pair
 # selected by 00_env.sh, with the Qwen3.5-on-FSDP flags from examples/train/models/run_qwen3.5_0.8b.sh
 # (text-only model on policy, ref and engines; no microbatch packing; NCCL weight sync). The teacher is
 # launched by the run itself (trainer.teacher.backend=skyrl, see TEACHER_OPTS) as SkyRL inference servers
@@ -58,6 +58,8 @@ opd_run() {
   echo "$RUN_NAME" > "${OPD_LOGS:-$HOME/logs}/last_opd_run"
   echo "run_name=$RUN_NAME  pair=${OPD_PAIR}  student=${OPD_STUDENT_MODEL} on ${NUM_GPUS} GPUs  teacher=${OPD_TEACHER_MODEL} on ${OPD_TEACHER_NUM_GPUS:-2} GPUs, launched by the run  thinking=${OPD_THINKING:-false}"
   cd "$SKYRL_DIR"   # uv resolves the project (and its extras) from the cwd
+  # generator.batched stays at its default (false): the batched path tokenizes prompts without
+  # chat_template_kwargs, so SkyRL rejects the pair (enable_thinking=false would be dropped silently).
   # Joins the node's Ray cluster (Anyscale's, or one from `ray start --head`). The teacher servers are Ray
   # actors holding GPUs of their own, so Ray places the student's $NUM_GPUS-GPU group on the others;
   # nothing here picks device ids. (A driver-side CUDA_VISIBLE_DEVICES is ignored by a running cluster.)
@@ -84,7 +86,6 @@ opd_run() {
     generator.inference_engine.run_engines_locally=true \
     generator.inference_engine.weight_sync_backend=nccl \
     generator.inference_engine.gpu_memory_utilization=0.8 \
-    generator.batched=true \
     generator.chat_template_kwargs="{enable_thinking: ${OPD_THINKING:-false}}" \
     environment.env_class=aime \
     generator.sampling_params.temperature=1.0 \

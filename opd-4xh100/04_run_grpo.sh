@@ -58,7 +58,6 @@ uv run --isolated --extra fsdp ${OPD_UV_WITH:-} -m skyrl.train.entrypoints.main_
   generator.inference_engine.run_engines_locally=true \
   generator.inference_engine.weight_sync_backend=nccl \
   generator.inference_engine.gpu_memory_utilization=0.8 \
-  generator.batched=true \
   generator.chat_template_kwargs="{enable_thinking: ${OPD_THINKING:-false}}" \
   environment.env_class=aime \
   generator.sampling_params.temperature=1.0 \
