@@ -30,6 +30,28 @@ if [[ -z "${RAY_ADDRESS:-}" && ! -f /tmp/ray/ray_current_cluster ]]; then
   return 1 2>/dev/null || exit 1
 fi
 
+# Ray version. The runs join the cluster, so the Ray they import must match the one the cluster runs, or
+# the connect is refused ("Version mismatch", seen 2026-09-27: cluster 2.51.1, SkyRL's lockfile 2.57.0).
+# SkyRL's install doc ("Running on an existing Ray cluster", Ray >= 2.48) prescribes a runtime override,
+# `uv run ... --with ray==<cluster version>`, not a pyproject edit; the Ray uv hook copies every `uv run`
+# option into the workers' py_executable, so they get it too. The cluster's version is read from the base
+# environment's `ray` (the cluster's own). OPD_RAY_VERSION overrides the detection; OPD_RAY_VERSION=pin
+# disables the override. uv 0.8.0-0.8.2 mishandle --with (the doc's warning).
+SKYRL_RAY_PIN="$(grep -m1 -oE '"ray\[default\]==[0-9.]+"' "$SKYRL_DIR/pyproject.toml" | grep -oE '[0-9]+(\.[0-9]+)+')"
+if [[ -z "${OPD_RAY_VERSION:-}" ]]; then
+  OPD_RAY_VERSION="$(ray --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)"
+  [[ -n "$OPD_RAY_VERSION" ]] || OPD_RAY_VERSION="$(python3 -c 'import ray; print(ray.__version__)' 2>/dev/null || true)"
+fi
+if [[ -z "$OPD_RAY_VERSION" || "$OPD_RAY_VERSION" == "pin" || "$OPD_RAY_VERSION" == "$SKYRL_RAY_PIN" ]]; then
+  export OPD_UV_WITH=""
+else
+  export OPD_UV_WITH="--with ray==$OPD_RAY_VERSION"
+fi
+export OPD_RAY_VERSION
+case "$(uv --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')" in
+  0.8.0|0.8.1|0.8.2) echo "WARNING: this uv mishandles --with (SkyRL install doc); upgrade uv before running" ;;
+esac
+
 # The two experiments; `post` (the post-trained pair) runs first. Each pair shares one tokenizer (verified
 # 2026-09-25 from the HF file hashes: 0.8B-Base and 9B-Base share tokenizer.json fe000e3e..., 0.8B and 9B
 # share 5f9e4d49...); the pairs do NOT share one with each other, so never mix a Base teacher with a
@@ -60,7 +82,7 @@ mkdir -p "$OPD_LOGS"
 echo "kit     : $OPD_KIT_DIR"
 echo "skyrl   : $SKYRL_DIR @ $(git -C "$SKYRL_DIR" rev-parse --abbrev-ref HEAD) $(git -C "$SKYRL_DIR" rev-parse --short HEAD)"
 echo "uv      : $(uv --version 2>/dev/null || echo MISSING)"
-echo "ray     : cluster at $(cat /tmp/ray/ray_current_cluster 2>/dev/null || echo "${RAY_ADDRESS}")"
+echo "ray     : cluster at $(cat /tmp/ray/ray_current_cluster 2>/dev/null || echo "${RAY_ADDRESS}"); cluster Ray ${OPD_RAY_VERSION:-unknown}, SkyRL pins ${SKYRL_RAY_PIN:-?}${OPD_UV_WITH:+; runs add: $OPD_UV_WITH}"
 echo "gpus    :"; nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader 2>/dev/null || echo "  nvidia-smi failed"
 echo "pair    : $OPD_PAIR  student=$OPD_STUDENT_MODEL  teacher=$OPD_TEACHER_MODEL  thinking=$OPD_THINKING"
 echo "teacher : $OPD_TEACHER_NUM_GPUS GPUs ($OPD_TEACHER_NUM_GPUS TP-1 servers), launched by the OPD run (trainer.teacher.backend=skyrl)"

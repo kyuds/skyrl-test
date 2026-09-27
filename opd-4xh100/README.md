@@ -64,8 +64,9 @@ pkill -TERM -f "vllm serve" ; sleep 10 ; nvidia-smi
 ```
 
 **1. Environment.** Finds the SkyRL checkout and refuses unless it has the OPD entrypoint and the
-launched teacher (i.e. is on the branch above); checks `uv`, the GPUs, the W&B key and that a Ray
-cluster is up; exports the `OPD_*`
+launched teacher (i.e. is on the branch above); checks `uv`, the GPUs, the W&B key, that a Ray
+cluster is up and which Ray version it runs (the run scripts override SkyRL's pin to it at run time
+when they differ); exports the `OPD_*`
 knobs (`post` pair, 9B teacher on 2 GPUs, student on 2, thinking off) plus `SKYRL_DIR` and
 `OPD_KIT_DIR`. Source it from bash, in the shell you will run everything else from.
 ```
@@ -164,6 +165,7 @@ the other.
 | `OPD_TEACHER_MAX_CONCURRENCY` | `256` | teacher scoring requests in flight (`trainer.teacher.max_concurrency`); each server also caps at `SKYRL_GENERATE_CONCURRENCY_PER_ENGINE` (512) |
 | `OPD_MAX_STEPS` / `GRPO_MAX_STEPS` | `40` / `200` | step caps |
 | `GRPO_NUM_GPUS` | `4` | GRPO's GPU count (`2` for a like-for-like `timing/step` with the OPD student) |
+| `OPD_RAY_VERSION` | read from the base environment's `ray` | the cluster's Ray version; when it differs from SkyRL's pin the run scripts add `--with ray==<version>` (SkyRL's install doc); `pin` disables the override |
 | `OPD_PROJECT` / `OPD_DATA` / `OPD_LOGS` | `opd_4xh100` / `~/data` / `~/logs` | W&B project, data root, logs and the last-run-name files |
 | `SKYRL_DIR` | found next to (or around) the kit | the SkyRL checkout; set it if the layout differs |
 
@@ -181,6 +183,15 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
   `RAY_OVERRIDE_RESOURCES` pins any new raylet to all four GPUs (`Attempting to start raylet with 4 GPU,
   but CUDA_VISIBLE_DEVICES contains ['2', '3']`). Teacher servers that are SkyRL inference-server actors
   are in the ledger by construction.
+- **Ray version override, not a pyproject edit.** The workspace's cluster runs its image's Ray (2.51.1)
+  while SkyRL's lockfile pins 2.57.0, and a driver on another version is refused at connect
+  (`Version mismatch`, 2026-09-27). SkyRL's install doc ("Running on an existing Ray cluster") says to
+  override at run time: `uv run … --with ray==<cluster version>`. `00_env.sh` reads the cluster's version
+  from the base environment's `ray` and the run scripts add that flag; the Ray uv hook copies every
+  `uv run` option into the workers' `py_executable`, so they import the same Ray (read in the hook's
+  source). SkyRL states compatibility with Ray ≥ 2.48 on this path; 2.51.1 itself is not exercised in
+  SkyRL's CI, which runs the pin. The clean alternative is a workspace image whose Ray matches the pin,
+  e.g. SkyRL's CI image `novaskyai/skyrl-train-ray-2.57.0-py3.12-cu13.0`; that needs a workspace restart.
 - **Thinking off** for both runs so a 0.8B thinker does not truncate at 8k every sample and both
   methods see the same prompt format. `OPD_THINKING=true` flips it (long responses, slower steps).
 - **Two eval sets.** AIME24 is the post's; 0.8B models sit near its floor, so the GSM8K slice is there

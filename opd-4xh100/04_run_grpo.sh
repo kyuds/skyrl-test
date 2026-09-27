@@ -30,7 +30,7 @@ fi
 echo "$RUN_NAME" > "${OPD_LOGS:-$HOME/logs}/last_grpo_run"
 echo "run_name=$RUN_NAME  pair=${OPD_PAIR}  student=${OPD_STUDENT_MODEL}  gpus=${NUM_GPUS}  thinking=${OPD_THINKING:-false}"
 cd "$SKYRL_DIR"   # uv resolves the project (and its extras) from the cwd; the run joins the node's Ray cluster
-uv run --isolated --extra fsdp -m skyrl.train.entrypoints.main_base \
+uv run --isolated --extra fsdp ${OPD_UV_WITH:-} -m skyrl.train.entrypoints.main_base \
   data.train_data="['$TRAIN_FILE']" \
   data.val_data="['$AIME_FILE','$GSM8K_FILE']" \
   trainer.policy.model.path="${OPD_STUDENT_MODEL}" \

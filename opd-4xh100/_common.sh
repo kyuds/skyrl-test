@@ -39,7 +39,8 @@ opd_run() {
   # actors holding GPUs of their own, so Ray places the student's $NUM_GPUS-GPU group on the others;
   # nothing here picks device ids. (A driver-side CUDA_VISIBLE_DEVICES is ignored by a running cluster.)
   # If another run still holds GPUs, the placement groups wait and fail after SKYRL_RAY_PG_TIMEOUT_IN_S (180 s).
-  uv run --isolated --extra fsdp -m skyrl.train.entrypoints.main_opd \
+  # OPD_UV_WITH (unquoted on purpose: it is zero or two words) overrides Ray to the cluster's version.
+  uv run --isolated --extra fsdp ${OPD_UV_WITH:-} -m skyrl.train.entrypoints.main_opd \
     data.train_data="['$TRAIN_FILE']" \
     data.val_data="['$AIME_FILE','$GSM8K_FILE']" \
     trainer.policy.model.path="${OPD_STUDENT_MODEL}" \
