@@ -73,8 +73,9 @@ knobs (`post` pair, 9B teacher on 2 GPUs, student on 2, thinking off) plus `SKYR
 OPD_PAIR=post source skyrl-test/opd-4xh100/00_env.sh
 ```
 
-**2. Data and model caches.** DAPO-17k + AIME24 (cleaned, as the post), a 256-row GSM8K eval slice,
-and the HF cache for `Qwen3.5-0.8B` and `Qwen3.5-9B` (19 GB). Run once.
+**2. Data and model caches.** DAPO-17k + AIME24 (cleaned, as the post), the GSM8K validation split,
+and the HF cache for `Qwen3.5-0.8B` and `Qwen3.5-9B` (19 GB). Run once. It ends by building the eval set
+(AIME24 + the first 256 GSM8K rows, under `$OPD_DATA/opd-eval`), which every run script also rebuilds.
 ```
 bash skyrl-test/opd-4xh100/01_prepare_data.sh
 ```
@@ -195,7 +196,12 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 - **Thinking off** for both runs so a 0.8B thinker does not truncate at 8k every sample and both
   methods see the same prompt format. `OPD_THINKING=true` flips it (long responses, slower steps).
 - **Two eval sets.** AIME24 is the post's; 0.8B models sit near its floor, so the GSM8K slice is there
-  to give the curves signal. Per-dataset keys are `eval/<data_source>/avg_score`.
+  to give the curves signal. Per-dataset keys are `eval/<data_source>/avg_score`. The runs read the kit's
+  copies under `$OPD_DATA/opd-eval`, which `make_eval_set.py` rebuilds from the sources at the start of
+  every run: one Arrow type convention, AIME rows in a fixed order, the first 256 GSM8K rows, then the
+  same load-and-concatenate SkyRL does. Without it the run dies in `get_eval_dataset` (seen 2026-09-27):
+  SkyRL's DAPO prep writes AIME through pandas 3 (`large_string`), the GSM8K script writes through
+  `datasets` (`string`), and `datasets.concatenate_datasets` refuses the mix.
 - **GRPO on four GPUs, OPD student on two.** Steps and rollouts are the comparison axis, not wall
   clock; set `GRPO_NUM_GPUS=2` if wall clock is the question.
 - **Not verified on a GPU:** anything. What has been verified offline against
@@ -214,7 +220,7 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 
 `00_env.sh` env and knobs · `01_prepare_data.sh` data and caches · `02_run_opd_smoke.sh` ·
 `03_run_opd.sh` · `04_run_grpo.sh` (`--smoke`) · `_common.sh` shared flags and the `TEACHER_OPTS` array ·
-`_locate.sh` finds SkyRL · `check_opd_run.py` (`--grpo`) · `compare_runs.py` · `slice_parquet.py`.
+`_locate.sh` finds SkyRL · `check_opd_run.py` (`--grpo`) · `compare_runs.py` · `make_eval_set.py` the eval set.
 
 ## Next, after these runs
 

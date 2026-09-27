@@ -15,6 +15,7 @@
 #   OPD_PAIR=post bash skyrl-test/opd-4xh100/04_run_grpo.sh
 set -euo pipefail
 source "$(dirname "$0")/_common.sh"
+opd_build_eval_set   # the same eval files the OPD runs read, rebuilt from their sources
 NUM_GPUS="${GRPO_NUM_GPUS:-4}"
 SMOKE=()
 if [[ "${1:-}" == "--smoke" ]]; then
