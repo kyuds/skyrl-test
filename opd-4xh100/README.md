@@ -5,10 +5,12 @@ Written 2026-09-25 for PR [#2256](https://github.com/NovaSky-AI/SkyRL/pull/2256)
 (`trainer.teacher.backend=skyrl`; design in `plan/opd-entrypoint/teacher-launcher.md`). Methodology
 from the NovaSky post
 [On-Policy Distillation in SkyRL](https://novasky-ai.notion.site/On-Policy-Distillation-in-SkyRL-2a38f0016b9d8095ae7cc5660b18debb):
-DAPO-Math-17k prompts, pure reverse-KL OPD, batch 512 × 16 with no mini-batching, LR 1e-5,
-temperature 1.0, prompt 2048 / response 8192, AIME24 avg@32 every 5 steps; and its RL baseline
-(LR 1e-6, mini-batch 32), here as naive GRPO. Its W&B report is public by link but not readable with
-the lab key, so the comparison to the post is by eye; the comparison that matters is the one you run.
+pure reverse-KL OPD, batch 512 × 16 with no mini-batching, LR 1e-5, temperature 1.0; and its RL
+baseline (LR 1e-6, mini-batch 32), here as naive GRPO. The task is not the post's. On Charlie's review
+(2026-09-28) the 0.8B student trains on GSM8K and is evaluated on the full GSM8K test split, prompt
+512 / response 2048, because it is too small for DAPO-17k (see Decisions), and the GRPO baseline runs
+first. The post's W&B report is public by link but not readable with the lab key; the comparison that
+matters is the one you run.
 
 ## The configuration to test first
 
@@ -29,7 +31,8 @@ through a `RemoteInferenceClient` like the student's engines, and tears them dow
 Everything teacher-related in this kit is one array, `TEACHER_OPTS` in `_common.sh`: two TP-1 servers
 (`inference_engine.num_engines=2`), text-only loading, and the in-flight cap. Defaults the launched block
 brings are not repeated: memory fraction 0.9, prefix caching off, `max_model_len` = longest input +
-longest response + 1 (4097 for the smoke, 10241 for the run). Nothing has run on a GPU yet.
+longest response + 1 (512 + 2048 + 1 = 2561 for every run). It has run end to end: the 2026-09-27 smoke,
+and five steps of the DAPO run, which died at step 5's eval on the student's own engines.
 
 The pair shares one tokenizer (verified from the HF file hashes: `Qwen3.5-0.8B` and `Qwen3.5-9B` both
 carry `tokenizer.json` 5f9e4d49…). The Base pair (`OPD_PAIR=base`: 0.8B-Base ← 9B-Base, tokenizer
@@ -96,18 +99,19 @@ bash skyrl-test/opd-4xh100/bg.sh --stop
 ```
 After reconnecting, source `00_env.sh` again before the check commands, which need its exports.
 
-**2. Data and model caches.** DAPO-17k + AIME24 (cleaned, as the post), the GSM8K validation split,
-and the HF cache for `Qwen3.5-0.8B` and `Qwen3.5-9B` (19 GB). Run once. It ends by building the eval set
-(AIME24 + the first 256 GSM8K rows, under `$OPD_DATA/opd-eval`), which every run script also rebuilds.
+**2. Data and model caches.** GSM8K's train split (7,473 prompts) and test split (1,319; SkyRL's
+`gsm8k_dataset.py` writes it as `validation.parquet`), and the HF cache for `Qwen3.5-0.8B` and
+`Qwen3.5-9B` (19 GB). Run once.
 ```
 bash skyrl-test/opd-4xh100/01_prepare_data.sh
 ```
 
-**3. The GRPO baseline (runs today).** Same student, prompts, evals, batch shape and lengths as the
-OPD run; plain GRPO with SkyRL's defaults spelled out in the script (group-normalized advantages,
-`regular` PPO-clip at 0.2, token-mean, KL loss 0.001 to the reference, none of DAPO's additions),
-LR 1e-6, mini-batch 32, 200 steps, all four GPUs. Smoke it first: three tiny steps. Each command
-below runs after the previous one has exited.
+**3. The GRPO baseline, first.** Run it before any OPD run (Charlie, 2026-09-28): it shows what the
+student reaches on GSM8K without a teacher, and that it learns the task at all. Same student, prompts,
+eval, batch shape and lengths as the OPD run (the shared `TASK_OPTS` array in `_common.sh`); plain GRPO
+with SkyRL's defaults spelled out in the script (group-normalized advantages, `regular` PPO-clip at 0.2,
+token-mean, KL loss 0.001 to the reference, none of DAPO's additions), LR 1e-6, mini-batch 32, 200 steps,
+all four GPUs. Smoke it first: three tiny steps. Each command below runs after the previous one has exited.
 ```
 bash skyrl-test/opd-4xh100/04_run_grpo.sh --smoke
 ```
@@ -123,7 +127,7 @@ Then the full run (`GRPO_MAX_STEPS=N` changes the cap; interrupted? re-run with
 bash skyrl-test/opd-4xh100/04_run_grpo.sh
 ```
 
-**4. Smoke the OPD path.** Three tiny steps (16 prompts × 8, 2k responses, 4-sample evals); the run
+**4. Smoke the OPD path.** Three tiny steps (16 prompts × 8, one eval sample per test prompt); the run
 brings up its two teacher servers first, so add the 9B model load to the time. Well under an hour once
 the caches are warm.
 ```
@@ -140,7 +144,8 @@ This is the first live exercise of the launched teacher path (scoring goes throu
 there; the trainer's error names the request, and the teacher servers' logs sit next to the student's
 under the run's log path.
 
-**5. The OPD run.** 40 steps at the post's shape, evals at 0, 5, 10, …; checkpoints every 10 steps.
+**5. The OPD run.** 40 steps at the post's batch shape, about 3 epochs of GSM8K train, evals at 0, 5,
+10, …; checkpoints every 10 steps.
 The run name is printed and saved to `~/logs/last_opd_run`. Needs the node to itself (the GRPO run
 must have finished): with the teacher on two GPUs and the student on two, all four are in use, and a
 run that cannot get its GPUs fails on a placement-group timeout after 180 s (`SKYRL_RAY_PG_TIMEOUT_IN_S`).
@@ -171,12 +176,15 @@ the other.
 - OPD timing: `timing/generate` versus `opd/teacher_time_exposed`; with a 9B teacher on two GPUs expect
   the exposed time to be a large share, the honest cost of this teacher. `opd/teacher_time_per_group_mean`
   is the per-prompt-group scoring time.
-- Both: `eval/all/avg_score`, `eval/<data_source>/avg_score` for the AIME and GSM8K sets,
-  `eval/all/pass_at_32`, `policy/policy_entropy`, and the GRPO run's `reward/*`. `vllm/train/*` is the
-  student's engines only: the launched teacher block turns Ray Prometheus stats off.
-- Cost, all ASSUMED until the first `timing/step`: OPD steps of 20–25 minutes dominated by the teacher
-  prefill, ~15–17 hours for 40 steps; GRPO steps of ~10 minutes on four GPUs, ~1.5–2 days for 200
-  steps plus 40 avg@32 evals. Eval every 5 steps means either run can be stopped early once flat.
+- Both: `eval/all/avg_score` (the GSM8K test split is the only eval set, so it equals
+  `eval/openai_gsm8k/avg_score`), `eval/all/pass_at_4`, `generate/avg_num_tokens` (should stay well under
+  the 2048 cap; the DAPO run's sat at its cap), `policy/policy_entropy` (the DAPO run's fell from 0.60 to
+  0.11 in one update), and the GRPO run's `reward/*`. `vllm/train/*` is the student's engines only: the
+  launched teacher block turns Ray Prometheus stats off.
+- Cost: the DAPO OPD run measured about 78 minutes per step (2026-09-28): 47–51 minutes generating
+  8k-token rollouts, 23 training, 30–60 seconds of exposed teacher time. GSM8K responses are several times
+  shorter, so expect a fraction of that per step (ASSUMED until the first GSM8K `timing/step`). Eval every
+  5 steps means either run can be stopped early once flat.
 
 ## Knobs (exported by `00_env.sh`; override in the shell before sourcing or on the command line)
 
@@ -188,6 +196,7 @@ the other.
 | `OPD_TEACHER_NUM_GPUS` / `OPD_NUM_STUDENT_GPUS` | `2` / `2` | teacher servers (`trainer.teacher.inference_engine.num_engines`, TP 1 each) and student GPUs; Ray picks the devices |
 | `OPD_TEACHER_MAX_CONCURRENCY` | `256` | teacher scoring requests in flight (`trainer.teacher.max_concurrency`); each server also caps at `SKYRL_GENERATE_CONCURRENCY_PER_ENGINE` (512) |
 | `OPD_MAX_STEPS` / `GRPO_MAX_STEPS` | `40` / `200` | step caps |
+| `OPD_EVAL_SAMPLES` | `4` | eval samples per GSM8K test prompt, both runs (the smokes use 1) |
 | `GRPO_NUM_GPUS` | `4` | GRPO's GPU count (`2` for a like-for-like `timing/step` with the OPD student) |
 | `OPD_RAY_VERSION` | read from the base environment's `ray` | the cluster's Ray version; when it differs from SkyRL's pin the run scripts add `--with ray==<version>` (SkyRL's install doc); `pin` disables the override |
 | `OPD_PROJECT` / `OPD_DATA` / `OPD_LOGS` | `opd_4xh100` / `~/data` / `~/logs` | W&B project, data root, logs and the last-run-name files |
@@ -216,22 +225,25 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
   source). SkyRL states compatibility with Ray ≥ 2.48 on this path; 2.51.1 itself is not exercised in
   SkyRL's CI, which runs the pin. The clean alternative is a workspace image whose Ray matches the pin,
   e.g. SkyRL's CI image `novaskyai/skyrl-train-ray-2.57.0-py3.12-cu13.0`; that needs a workspace restart.
-- **Thinking off** for both runs so a 0.8B thinker does not truncate at 8k every sample and both
-  methods see the same prompt format. `OPD_THINKING=true` flips it (long responses, slower steps).
-- **Two eval sets.** AIME24 is the post's; 0.8B models sit near its floor, so the GSM8K slice is there
-  to give the curves signal. Per-dataset keys are `eval/<data_source>/avg_score`. The runs read the kit's
-  copies under `$OPD_DATA/opd-eval`, which `make_eval_set.py` rebuilds from the sources at the start of
-  every run: one Arrow type convention, AIME rows in a fixed order, the first 256 GSM8K rows, then the
-  same load-and-concatenate SkyRL does. Without it the run dies in `get_eval_dataset` (seen 2026-09-27):
-  SkyRL's DAPO prep writes AIME through pandas 3 (`large_string`), the GSM8K script writes through
-  `datasets` (`string`), and `datasets.concatenate_datasets` refuses the mix.
+- **Thinking off** for both runs so a 0.8B thinker does not truncate at the 2k cap and both methods
+  see the same prompt format. `OPD_THINKING=true` flips it (long responses, slower steps).
+- **GSM8K, not DAPO** (Charlie, 2026-09-28). A 0.8B student cannot finish most DAPO-17k problems: in the
+  DAPO OPD run its step-1 rollouts, from the untrained model, averaged 7,553 of 8,192 tokens with train
+  pass@16 0.19, and after one update entropy fell from 0.60 to 0.11 and nearly every rollout ran to the
+  cap. On GSM8K it starts at avg@32 0.47 and pass@32 0.92, with answers that end well inside 2048
+  tokens, so both methods have room to improve on text that finishes. One train file and one eval file,
+  so SkyRL concatenates nothing; the AIME + GSM8K eval's `make_eval_set.py` is gone (in the git history).
+- **OPD's learning rate is the post's 1e-5 with no warmup.** The DAPO run's collapse after one update is
+  also consistent with that step size: AdamW's first step moves every weight by about the learning rate,
+  whatever `kl_coef` is, and 1e-5 is ten times GRPO's. If the GSM8K OPD smoke collapses too, rerun it with
+  `trainer.policy.optimizer_config.lr=1e-6` as an extra override before blaming the task.
 - **GRPO on four GPUs, OPD student on two.** Steps and rollouts are the comparison axis, not wall
   clock; set `GRPO_NUM_GPUS=2` if wall clock is the question.
-- **Not verified on a GPU:** anything. What has been verified offline against
-  `kyuds/opd-teacher-launching` @ `a57a03a9`: every script's generated argument list (GRPO smoke and
-  full, OPD smoke and full) parses and passes `validate_cfg`, and the OPD lists pass `validate_opd_cfg`
+- **Verified offline** (2026-09-28, GSM8K task, `kyuds/opd-teacher-launching` @ `937e2355`): every
+  script's generated argument list (GRPO smoke and full, OPD smoke and full) parses, passes `validate_cfg`
+  and constructs `SkyRLGymGenerator` (whose own checks are not part of `validate_cfg`), and the OPD lists pass `validate_opd_cfg`
   with the launched backend, resolving to two TP-1 text-only servers at memory fraction 0.9, prefix
-  caching and Ray Prometheus stats off, context 4097 (smoke) / 10241 (run), first port 8200 (past the
+  caching and Ray Prometheus stats off, context 2561, first port 8200 (past the
   student's two windows), 256 requests in flight; sleep mode is off by the frozen-role argument builder
   (read in source, not exercised here). The 9B checkpoints and tokenizer hashes were checked on HF.
 - **If a teacher server OOMs at startup**, lower `trainer.teacher.inference_engine.gpu_memory_utilization`
@@ -243,7 +255,7 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 
 `00_env.sh` env and knobs · `01_prepare_data.sh` data and caches · `02_run_opd_smoke.sh` ·
 `03_run_opd.sh` · `04_run_grpo.sh` (`--smoke`) · `_common.sh` shared flags and the `TEACHER_OPTS` array ·
-`_locate.sh` finds SkyRL · `bg.sh` detached runs (`--status`, `--stop`) · `check_opd_run.py` (`--grpo`) · `compare_runs.py` · `make_eval_set.py` the eval set.
+`_locate.sh` finds SkyRL · `bg.sh` detached runs (`--status`, `--stop`) · `check_opd_run.py` (`--grpo`) · `compare_runs.py`.
 
 ## Next, after these runs
 

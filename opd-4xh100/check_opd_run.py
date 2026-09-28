@@ -66,7 +66,7 @@ else:
           f"{r.get('timing/step', float('nan')):>6.0f}  {r.get('policy/policy_entropy', float('nan')):>14.4f}"
       )
 
-print("\neval rows (eval/all plus every per-dataset avg_score, e.g. the AIME24 and GSM8K sets):")
+print("\neval rows (eval/all plus every per-dataset avg_score; the GSM8K test split is the only eval set):")
 score_keys = sorted({k for r in eval_rows for k in r if k.startswith("eval/") and k.endswith("/avg_score")})
 pass_keys = sorted({k for r in eval_rows for k in r if k.startswith("eval/all/pass_at_")})
 for r in eval_rows:
