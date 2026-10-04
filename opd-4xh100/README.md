@@ -169,6 +169,19 @@ step (the post's axis: OPD reached in ~20 steps what RL reached in ~200) and mea
 student `Qwen3.5-0.8B-Base`); each run launches its own teacher, so the pairs simply run one after
 the other.
 
+**8. A trained student as the teacher.** `05_run_opd_from_export.sh` runs step 5 again on a fresh
+student, with the HF export of an earlier OPD run as the teacher, loaded from the local export
+directory. By default that is `global_step_40` of the run named in `~/logs/last_opd_run`. It prints
+the export it chose, adapts the teacher's text-only switch to the export's config, checks that the
+node's vLLM registers the export's architecture, and records the choice in
+`~/logs/<run name>.teacher` so a resume keeps the same teacher. Pick another export with
+`TEACHER_RUN=<run name>` and `TEACHER_STEP=<N>`, or any HF directory with `OPD_TEACHER_EXPORT=<path>`.
+```
+bash skyrl-test/opd-4xh100/05_run_opd_from_export.sh
+```
+Once this run starts, `~/logs/last_opd_run` names it, so a second default launch refuses and asks
+for `TEACHER_RUN`. Resume an interrupted run with `OPD_RUN_NAME=<its printed name>`.
+
 ## What to look at on W&B (project `opd_4xh100`)
 
 - OPD: `opd/reverse_kl` should fall fast and flatten (the post's 1.7B ← 4B pair flattened near 0.09;
@@ -254,7 +267,7 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 ## Files
 
 `00_env.sh` env and knobs · `01_prepare_data.sh` data and caches · `02_run_opd_smoke.sh` ·
-`03_run_opd.sh` · `04_run_grpo.sh` (`--smoke`) · `_common.sh` shared flags and the `TEACHER_OPTS` array ·
+`03_run_opd.sh` · `04_run_grpo.sh` (`--smoke`) · `05_run_opd_from_export.sh` a trained student as the teacher · `_common.sh` shared flags and the `TEACHER_OPTS` array ·
 `_locate.sh` finds SkyRL · `bg.sh` detached runs (`--status`, `--stop`) · `check_opd_run.py` (`--grpo`) · `compare_runs.py`.
 
 ## Next, after these runs

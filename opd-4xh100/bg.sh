@@ -36,7 +36,7 @@ esac
 
 : "${OPD_STUDENT_MODEL:?source 00_env.sh first, in this shell: the detached run inherits its exports}"
 script="$1"; shift
-[[ -f "$KIT/$script" ]] || { echo "no such script in the kit: $script (one of: $(cd "$KIT" && ls 0[2-4]_*.sh | tr '\n' ' '))"; exit 2; }
+[[ -f "$KIT/$script" ]] || { echo "no such script in the kit: $script (one of: $(cd "$KIT" && ls 0[2-9]_*.sh | tr '\n' ' '))"; exit 2; }
 if alive; then echo "a detached run is still going (pid $(cat "$PIDFILE"), log $(latest_log)); bg.sh --status or --stop first"; exit 1; fi
 suffix=""; [[ $# -gt 0 ]] && suffix="_$(printf '%s_' "$@" | sed 's/--*//g; s/[^A-Za-z0-9_.=]/_/g; s/_*$//' | cut -c1-40)"
 log="$LOGS/$(basename "$script" .sh)${suffix}_$(date +%Y%m%d_%H%M%S).log"
