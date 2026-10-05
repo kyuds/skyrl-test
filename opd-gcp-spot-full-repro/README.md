@@ -91,9 +91,17 @@ environment (for example `GCP_VM`, default `kyuds-opd-b200`).
 
 **A1. Push this branch.** The VM clones the kit from GitHub, on the branch this checkout is on.
 
-**A2. Create the VM.** Spot B200 capacity comes and goes; when a request is refused for lack of capacity
-the script retries every minute for up to four hours, so keep the laptop awake. Any other error (quota,
-permissions, a retired image) stops it at once. It asks before it starts billing.
+**A2. Create the VM.** Spot B200 capacity comes and goes. The script tries `us-west3-b`, then `us-west3-c`,
+and when both are out of capacity waits a minute and goes round again, for up to four hours, printing one
+line per refusal (`GCP_VERBOSE=1` shows gcloud's full message). Keep the laptop awake. Errors that waiting
+cannot fix (permissions, a retired image) stop it at once. It asks before it starts billing.
+
+The guide pins `us-west3-b` because its RDMA network is zone-specific; a single node has no RDMA network,
+so `us-west3-c`, in the same region, is a second chance for free. The other scripts find the VM's zone by
+themselves. More zones offer the machine type (`us-south1-b`, `us-central1-b`, `us-east1-b`, `us-east1-d`,
+`us-east4-b`, `us-west2-c`) and the network has a subnet in each of those regions, but whether the project
+has B200 quota there was not checked; `GCP_ZONES="us-west3-b us-west3-c us-south1-b"` adds one, and a zone
+refused for quota is dropped for the rest of the run.
 
 The image is `pytorch-2-9-cu129-ubuntu-2204-nvidia-580`, not the guide's
 `pytorch-2-7-cu128-ubuntu-2204-nvidia-570`: every image of the guide's family was deprecated by 2026-10,
@@ -237,6 +245,8 @@ bash skyrl-test/opd-gcp-spot-full-repro/gcp/02_setup_node.sh
 ```bash
 bash skyrl-test/opd-gcp-spot-full-repro/gcp/03_start_ray.sh
 ```
+
+A stopped VM can only restart in the zone it is in, so the first command waits for capacity there.
 
 Then on the VM: B1, B2 (the data is still there; the models download again), and the same B4 command as
 before. Run names are fixed, so a run resumes from its last checkpoint, and `04_run_all.sh` skips the

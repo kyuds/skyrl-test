@@ -15,8 +15,19 @@ if [[ -z "$GCP_PROJECT" || "$GCP_PROJECT" == "(unset)" ]]; then
   echo "no GCP project: gcloud config set project <project id>, or export GCP_PROJECT" >&2
   return 1 2>/dev/null || exit 1
 fi
-GCP_ZONE="${GCP_ZONE:-us-west3-b}"
 GCP_VM="${GCP_VM:-kyuds-opd-b200}"
+# Zones 01_create_vm.sh tries, in order, each time round. The guide pins us-west3-b because its RDMA network
+# profile is zone-specific; a single node has no RDMA network, so us-west3-c (same region: same subnet, same
+# quota) is a second chance at spot capacity for free. The machine type is also offered in us-south1-b,
+# us-central1-b, us-east1-b, us-east1-d, us-east4-b and us-west2-c, and b200-vpc has a subnet of the same name
+# in each of those regions, but whether the project has B200 quota there was not checked: add them to try
+# (a zone refused for quota is dropped for the rest of the run).
+GCP_ZONES="${GCP_ZONES:-us-west3-b us-west3-c}"
+# The VM's zone: wherever it already exists, else the first zone of the list. Setting GCP_ZONE skips the lookup.
+if [[ -z "${GCP_ZONE:-}" ]]; then
+  GCP_ZONE="$(gcloud compute instances list --project "$GCP_PROJECT" --filter="name=$GCP_VM" --format='value(zone.basename())' 2>/dev/null | head -1)"
+  [[ -n "$GCP_ZONE" ]] || GCP_ZONE="${GCP_ZONES%% *}"
+fi
 GCP_MACHINE_TYPE="${GCP_MACHINE_TYPE:-a4-highgpu-8g}"
 GCP_IMAGE_PROJECT="${GCP_IMAGE_PROJECT:-deeplearning-platform-release}"
 # The guide names pytorch-2-7-cu128-ubuntu-2204-nvidia-570, but every image of that family was deprecated by
