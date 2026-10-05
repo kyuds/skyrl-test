@@ -182,6 +182,20 @@ bash skyrl-test/opd-4xh100/05_run_opd_from_export.sh
 Once this run starts, `~/logs/last_opd_run` names it, so a second default launch refuses and asks
 for `TEACHER_RUN`. Resume an interrupted run with `OPD_RUN_NAME=<its printed name>`.
 
+**9. Upload a run's weights to the Hub.** `upload_export.sh` uploads one HF export as a private model
+repo under `kyuds/` (`HF_USER` changes the account). With no arguments it takes the newest OPD run's
+highest complete export and names the repo `opd-4xh100-<run name>-step<N>`. It needs a write token
+exported as `HF_TOKEN` in the shell; never put the token in this repo. Look first:
+```
+bash skyrl-test/opd-4xh100/upload_export.sh --dry-run
+```
+Then upload:
+```
+bash skyrl-test/opd-4xh100/upload_export.sh
+```
+`--grpo` takes the newest GRPO run instead, `--run <name>` and `--step <N>` pick any export,
+`--repo <name>` sets the repo name, and `--public` makes a new repo public.
+
 ## What to look at on W&B (project `opd_4xh100`)
 
 - OPD: `opd/reverse_kl` should fall fast and flatten (the post's 1.7B ← 4B pair flattened near 0.09;
@@ -268,7 +282,7 @@ need a space after the colon (`"{enable_thinking: false}"`); the parser reads `{
 
 `00_env.sh` env and knobs · `01_prepare_data.sh` data and caches · `02_run_opd_smoke.sh` ·
 `03_run_opd.sh` · `04_run_grpo.sh` (`--smoke`) · `05_run_opd_from_export.sh` a trained student as the teacher · `_common.sh` shared flags and the `TEACHER_OPTS` array ·
-`_locate.sh` finds SkyRL · `bg.sh` detached runs (`--status`, `--stop`) · `check_opd_run.py` (`--grpo`) · `compare_runs.py`.
+`_locate.sh` finds SkyRL · `bg.sh` detached runs (`--status`, `--stop`) · `check_opd_run.py` (`--grpo`) · `compare_runs.py` · `upload_export.sh` an export to the Hub (`--grpo`, `--run`, `--step`, `--repo`, `--dry-run`).
 
 ## Next, after these runs
 
