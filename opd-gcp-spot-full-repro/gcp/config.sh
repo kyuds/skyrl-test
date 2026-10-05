@@ -19,7 +19,10 @@ GCP_ZONE="${GCP_ZONE:-us-west3-b}"
 GCP_VM="${GCP_VM:-kyuds-opd-b200}"
 GCP_MACHINE_TYPE="${GCP_MACHINE_TYPE:-a4-highgpu-8g}"
 GCP_IMAGE_PROJECT="${GCP_IMAGE_PROJECT:-deeplearning-platform-release}"
-GCP_IMAGE_FAMILY="${GCP_IMAGE_FAMILY:-pytorch-2-7-cu128-ubuntu-2204-nvidia-570}"
+# The guide names pytorch-2-7-cu128-ubuntu-2204-nvidia-570, but every image of that family was deprecated by
+# 2026-10 and it no longer resolves. This is its successor (Ubuntu 22.04, Python 3.12, driver 580 preinstalled).
+# Families keep being retired; 01_create_vm.sh checks this one and lists the current ones if it is gone.
+GCP_IMAGE_FAMILY="${GCP_IMAGE_FAMILY:-pytorch-2-9-cu129-ubuntu-2204-nvidia-580}"
 # The guide uses 500GB. Doubled here because checkpoints and HF exports go to the boot disk (the only disk a
 # preemption leaves intact): 4 runs x (2 checkpoints + an export every 10 steps) of 4B and 1.7B models.
 GCP_BOOT_DISK_GB="${GCP_BOOT_DISK_GB:-1000}"

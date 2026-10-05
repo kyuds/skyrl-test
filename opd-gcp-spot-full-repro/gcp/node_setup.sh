@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Runs ON the VM. The gcp/*.sh scripts on your Mac copy it to ~/opd_node_setup.sh and call one phase at a time;
 # every phase can be run again safely (after a reboot, a preemption, or a dropped connection).
-#   driver           NVIDIA driver 580 + gIB and the nccl.h symlink (guide 2.1). SkyRL's torch is a CUDA 13
-#                    build, which the image's 570 driver cannot run. Prints REBOOT_NEEDED when a reboot is due.
+#   driver           Makes sure the NVIDIA driver is 580 or newer: SkyRL's torch is a CUDA 13 build, which a 570
+#                    driver cannot run. The current image ships 580, so this installs nothing; on an older image
+#                    it installs driver 580 + gIB and the nccl.h symlink (guide 2.1). Prints REBOOT_NEEDED when a
+#                    reboot is due (after a driver install, or for the open-file limit on a fresh VM).
 #   storage          RAID-0 the local NVMe SSDs at /mnt/local_storage (guide 3), point ~/.cache at it, create
 #                    the store on the boot disk, write ~/.opd_cluster_env (single-node NCCL settings).
 #   software         build tools, uv, SkyRL at $SKYRL_BRANCH with this kit inside it at $KIT_BRANCH, the base

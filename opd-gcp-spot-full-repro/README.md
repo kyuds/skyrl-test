@@ -91,14 +91,21 @@ environment (for example `GCP_VM`, default `kyuds-opd-b200`).
 
 **A1. Push this branch.** The VM clones the kit from GitHub, on the branch this checkout is on.
 
-**A2. Create the VM.** Spot B200 capacity comes and goes; the script retries every minute for up to four
-hours, so keep the laptop awake. It asks before it starts billing.
+**A2. Create the VM.** Spot B200 capacity comes and goes; when a request is refused for lack of capacity
+the script retries every minute for up to four hours, so keep the laptop awake. Any other error (quota,
+permissions, a retired image) stops it at once. It asks before it starts billing.
+
+The image is `pytorch-2-9-cu129-ubuntu-2204-nvidia-580`, not the guide's
+`pytorch-2-7-cu128-ubuntu-2204-nvidia-570`: every image of the guide's family was deprecated by 2026-10,
+so it no longer resolves. Google retires these families regularly; if this one goes too, the script
+lists the current ones and `GCP_IMAGE_FAMILY=<family>` selects another.
 
 ```bash
 caffeinate -i bash skyrl-test/opd-gcp-spot-full-repro/gcp/01_create_vm.sh
 ```
 
-**A3. Set the node up.** NVIDIA driver 580 with one reboot (SkyRL's torch is a CUDA 13 build), the NVMe
+**A3. Set the node up.** A driver check (SkyRL's torch is a CUDA 13 build and needs driver 580, which this
+image ships; an older image gets it installed) and one reboot for the open-file limit, the NVMe
 array at `/mnt/local_storage` for caches, then `uv`, SkyRL on `kyuds/opd-entrypoint` with this kit inside
 it (`~/SkyRL/skyrl-test`), and a warm environment. About 20 minutes on a fresh VM. The long part runs
 detached on the VM, so if the connection drops, run the same command again and it re-attaches.
@@ -305,7 +312,7 @@ and `vm_startup.sh` is the VM's boot script; the others copy and call them.
 
 ## Verified and assumed
 
-Verified on 2026-10-05, on the Mac, without a GPU or GCP:
+Verified on 2026-10-05, from the Mac, without a GPU or a VM:
 
 - Every run script's flags parse into the entrypoint's config and pass `validate_cfg` (and
   `validate_opd_cfg` for OPD) at PR head `e1a51156`, for the full runs and the smoke runs.
@@ -314,14 +321,19 @@ Verified on 2026-10-05, on the Mac, without a GPU or GCP:
 - The Mac-side `gcp/` scripts against a stand-in for `gcloud`: create with retries, the unpushed-branch
   guard, driver + reboot + storage + polled software phase, Ray start, the key push (values arrive
   intact and never appear on a command line), status, stop.
+- Read-only queries against the project (2026-10-05): the image family resolves, the subnet `b200-vpc`
+  exists in `us-west3`, `a4-highgpu-8g` is offered in `us-west3-b` with 8 B200s, and a firewall rule on
+  `b200-vpc` allows ssh from outside.
 
 Not verified:
 
-- Anything on GCP: no VM has been created, and no real `gcloud` command has run.
+- Creating the VM and everything after it. The first attempt, on 2026-10-05, stopped at the retired image
+  family, which is what led to the current default.
 - `gcp/node_setup.sh`, the part that runs on the VM (driver install, NVMe array, `uv`, checkouts, Ray). It
   needs Linux and has only been syntax-checked. Expect to fix something in it on the first real node.
 - That this stack runs on B200s at all (the smoke test is the first check), and how long a step takes.
-- That the firewall rules for `b200-train` on `b200-vpc` allow ssh from outside; the guide implies it.
+- That the node setup works on the `pytorch-2-9` image. The guide's steps were written for the retired
+  `pytorch-2-7` image; this one differs at least in shipping driver 580 already.
 - That an `a4-highgpu-8g` accepts a single network interface. The guide attaches ten for multi-node RDMA;
   this kit attaches one.
 - The step counts and the teacher step, which are read off the post's charts and one old script.
