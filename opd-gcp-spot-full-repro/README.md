@@ -1,4 +1,4 @@
-# Reproducing the blog's OPD result on one spot 8×B200 node
+# Reproducing the blog's OPD result on one spot 8-GPU node (B200 or H100)
 
 Written 2026-10-05. The 4×H100 experiment ([kyuds/skyrl-test#1](https://github.com/kyuds/skyrl-test/pull/1))
 had naive GRPO beat OPD for a Qwen3.5-0.8B student on GSM8K (best eval 0.85 against 0.72 and 0.71), and a
@@ -9,7 +9,8 @@ through the new entrypoint (`skyrl.train.entrypoints.main_opd`,
 RL-train Qwen3-4B-Base with the DAPO recipe, then distil that model back into Qwen3-4B-Base and into
 Qwen3-1.7B-Base.
 
-It runs on one spot `a4-highgpu-8g` VM (8 × B200) on GCP, set up after Charlie's guide
+It runs on one spot 8-GPU VM on GCP: an `a4-highgpu-8g` (8 × B200) or, when none can be had, an
+`a3-highgpu-8g` (8 × H100). The setup follows Charlie's guide
 [Running SkyRL on GCP Spot B200s](https://gist.github.com/CharlieFRuan/6eeae93d70ede0e81f12f91a4eb74d57)
 cut down to a single node.
 
@@ -46,8 +47,8 @@ at the PR head) and from the post's W&B report.
 | Question | What the sources say | What this kit does |
 |---|---|---|
 | Which checkpoint of run 1 is the teacher? | The post: "the resulting model". The pre-PR OPD scripts on `main` hardcode `~/ckpts/dapo_qwen3_4b_base/global_step_90/`, and the report's DAPO 4B curve ends near step 90. | Step 90 (`TEACHER_STEP`). An assumption from those two hints. |
-| How long does each run go? | The scripts say `epochs=20` (about 680 steps); the post never says when a run was stopped. The report's curves end near 90 (run 1), 30 (run 2), 60–70 (run 3), 230 (run 4; the text says "~200"). | 90 / 30 / 60 / 200 (`DAPO_MAX_STEPS`, `OPD_MAX_STEPS`). Read off charts. |
-| What hardware? | Not stated. The DAPO 4B script is written for 2 nodes × 8 GPUs, the other three for 1 × 8; no GPU model is named. The report's run table shows runtimes of 2 to 5 days (names truncated, so not mapped to runs). | 8 B200s for everything. Run 1 uses 8 ranks instead of 16 with the same mini-batch (32), optimizer steps per batch (16) and micro-batch (4). |
+| How long does each run go? | The scripts say `epochs=20` (about 680 steps); the post never says when a run was stopped. The report's curves end near 90 (run 1), 30 (run 2), 60–70 (run 3), 230 (run 4; the text says "~200"). The repo's DAPO README gives 90 and 225 steps for its Qwen3-4B and Qwen3-1.7B reference runs. | 90 / 30 / 60 / 200 (`DAPO_MAX_STEPS`, `OPD_MAX_STEPS`). Read off charts. |
+| What hardware? | The post does not say. The repo's DAPO README lists "8xH100" for its Qwen3-4B and Qwen3-1.7B reference runs, though the 4B script is written for 2 nodes × 8 GPUs (the other three for 1 × 8). Nothing names the hardware of the OPD runs. The report's run table shows runtimes of 2 to 5 days (names truncated, so not mapped to runs). | One 8-GPU node for everything, B200s or H100s. Run 1 uses 8 ranks instead of 16 with the same mini-batch (32), optimizer steps per batch (16) and micro-batch (4). |
 | Where does the teacher run? | In the post it is the reference-model slot: an FSDP forward on the student's own 8 GPUs. | The entrypoint under test serves it from vLLM engines on GPUs of its own: student 4, teacher 4. This is the thing being tested, not a free choice. |
 | How is the OPD loss aggregated? | The post divides the sum of per-token losses by a fixed constant (`seq_mean_token_sum_norm` with `max_seq_len` = prompt + response). The entrypoint's default, `token_mean`, divides by the batch's token count, which is a different update. | The post's, passed explicitly by `03_run_opd.sh`: `loss_reduction=seq_mean_token_sum_norm`, `max_seq_len=10240` (2048 + 8192). The entrypoint's default stays `token_mean`. |
 | Are today's scripts the post's scripts? | The post is from 2025-11; the repo scripts have been edited since (for example `loss_reduction=token_mean_legacy`, added to keep the old behaviour). | Today's scripts, flag for flag. |
@@ -57,20 +58,47 @@ at the PR head) and from the post's W&B report.
 One operational setting differs on purpose: checkpoints every 5 steps instead of 10 (`OPD_CKPT_INTERVAL`),
 keeping two. It changes no result and halves what a preemption costs.
 
-## How many B200s
+## How many GPUs, and which
 
-Eight: one `a4-highgpu-8g`. The post's largest run was written for 16 GPUs, and 8 B200s hold more memory
-than 16 80 GB cards, so nothing needs a second node. That removes the RDMA networks, multi-node NCCL and
-a shared filesystem from the setup. The cost is wall clock: the four runs are sequential, and nothing
-here measures how long a step takes on B200s. The post's own runs took days. Watch the first few steps
-of run 1 before trusting any estimate.
+Eight, on one node. The post's largest run was written for 16 GPUs, but no model here is larger than 4B, so
+nothing needs a second node. That removes the RDMA networks, multi-node NCCL and a shared filesystem from
+the setup. The cost is wall clock: the four runs are sequential.
+
+`gcp/01_create_vm.sh` takes either of two nodes, whichever has spot capacity first:
+
+| | `a4-highgpu-8g` | `a3-highgpu-8g` |
+|---|---|---|
+| GPUs | 8 × B200, 180 GB each | 8 × H100, 80 GB each |
+| Asked for | first, every round | after the B200 zones, every round |
+| VM name | `kyuds-opd-b200` | `kyuds-opd-h100` |
+| Local SSDs (caches) | 32 × 375 GB | 16 × 375 GB |
+
+Everything after the VM exists is the same on both. The run scripts pass GPU counts, never a GPU model, and
+their memory settings (micro-batch sizes, `gpu_memory_utilization`) are the repo scripts' own. What an H100
+node changes:
+
+- **Memory, DAPO runs (1 and 4).** The repo lists 8×H100 for its DAPO reference runs of both models, and
+  the micro-batch sizes here are that recipe's. One difference: run 1 here has 8 ranks where its script has
+  16, so each GPU holds twice the share of the weights and optimizer state, a few GB more. Not run.
+- **Memory, OPD runs (2 and 3).** The student trains on 4 GPUs with micro-batches of 2, half of run 1's 4 at
+  the same sequence length, and each teacher GPU holds one 4B model. Not run. If the student runs out of
+  memory, append `trainer.micro_train_batch_size_per_gpu=1 trainer.micro_forward_batch_size_per_gpu=1` to
+  the command: with the OPD runs' loss aggregation the micro-batch size changes memory only, not the update.
+  (That is not true of the DAPO runs: `token_mean_legacy` averages per micro-batch.)
+- **The smoke test cannot show an out-of-memory.** It caps responses at 1024 tokens. The first steps of a
+  real run are the test, as soon as a micro-batch holds responses near the 8192-token limit.
+- **Time.** An H100 is the slower card; how much slower for these runs was not measured. The post's own
+  runs took 2 to 5 days each, most likely on H100s.
+
+Nothing here measures how long a step takes on either node. Watch the first few steps of run 1 before
+trusting any estimate.
 
 ## Part A. On your Mac: get the VM
 
 These scripts drive GCP through `gcloud`. Run them from `~/dev/skyrl`.
 
 **A0. Prerequisites (once).** You need access to the lab's GCP project (its id is in Charlie's guide) with
-permission to create spot `a4-highgpu-8g` VMs in `us-west3-b`, and the `gcloud` CLI:
+permission to create spot VMs, and the `gcloud` CLI:
 
 ```bash
 brew install --cask gcloud-cli
@@ -85,28 +113,40 @@ gcloud config set project <project id from Charlie's guide>
 ```
 
 The project id is read from your `gcloud` config and is not written into this public repo. The scripts
-assume the network `b200-vpc` (subnet `b200-vpc`) and its firewall rules for the tag `b200-train` already
+assume the network `b200-vpc` (subnet `b200-vpc`) and its firewall rule that allows ssh already
 exist, as the guide does; `gcp/config.sh` lists every setting and each can be overridden from the
-environment (for example `GCP_VM`, default `kyuds-opd-b200`).
+environment.
 
 **A1. Push this branch.** The VM clones the kit from GitHub, on the branch this checkout is on.
 
-**A2. Create the VM.** Spot B200 capacity comes and goes. The script tries `us-west3-b`, then `us-west3-c`,
-and when both are out of capacity waits a minute and goes round again, for up to four hours, printing one
-line per refusal (`GCP_VERBOSE=1` shows gcloud's full message). Keep the laptop awake. Errors that waiting
-cannot fix (permissions, a retired image) stop it at once. It asks before it starts billing.
+**A2. Create the VM.** Spot capacity for 8-GPU nodes comes and goes. Each round the script asks for the
+B200 node in `us-west3-b`, `us-west3-c`, `us-south1-b` and `us-central1-b`, then for the H100 node in ten
+US zones, and keeps the first VM it is given. The VM is named after what it got, `kyuds-opd-b200` or
+`kyuds-opd-h100`, and every other script finds it and its zone by itself. When every request is refused
+for lack of capacity the script prints one line, waits a minute and goes round again, for up to 240
+rounds. Keep the laptop awake. It asks before it starts billing.
+
+Refusals other than capacity are not retried. A region that refuses for quota is not asked again for that
+kind of node, and a request refused for any other reason (a bad flag, permissions) is printed and that
+zone is dropped; when nothing is left the script stops. `GCP_VERBOSE=1` shows gcloud's message for every
+refusal.
 
 The guide pins `us-west3-b` because its RDMA network is zone-specific; a single node has no RDMA network,
-so `us-west3-c`, in the same region, is a second chance for free. The other scripts find the VM's zone by
-themselves. More zones offer the machine type (`us-south1-b`, `us-central1-b`, `us-east1-b`, `us-east1-d`,
-`us-east4-b`, `us-west2-c`) and the network has a subnet in each of those regions, but whether the project
-has B200 quota there was not checked; `GCP_ZONES="us-west3-b us-west3-c us-south1-b"` adds one, and a zone
-refused for quota is dropped for the rest of the run.
+so any zone that offers the machine type will do, and the network has a subnet in every region. The four
+B200 zones all accepted the request on 2026-10-05 and refused it for capacity, not quota. Whether the
+project has H100 quota in the H100 zones is not known. The lists are `GCP_B200_ZONES` and `GCP_H100_ZONES`
+in `gcp/config.sh`; an empty list turns that kind off, so this asks for B200s only:
+
+```bash
+GCP_H100_ZONES= caffeinate -i bash skyrl-test/opd-gcp-spot-full-repro/gcp/01_create_vm.sh
+```
 
 The image is `pytorch-2-9-cu129-ubuntu-2204-nvidia-580`, not the guide's
 `pytorch-2-7-cu128-ubuntu-2204-nvidia-570`: every image of the guide's family was deprecated by 2026-10,
 so it no longer resolves. Google retires these families regularly; if this one goes too, the script
 lists the current ones and `GCP_IMAGE_FAMILY=<family>` selects another.
+
+Either kind, whichever comes first:
 
 ```bash
 caffeinate -i bash skyrl-test/opd-gcp-spot-full-repro/gcp/01_create_vm.sh
@@ -173,7 +213,7 @@ tail -f ~/opd-store/logs/prepare.log
 
 **B3. Smoke test.** Two tiny steps of DAPO, exported, then two tiny steps of OPD with that export as the
 teacher. It exercises everything the real runs do except the upload: 8 FSDP ranks, the export, a teacher
-served from an export, the 4 + 4 split. Do not skip it: none of this has run on a B200 yet.
+served from an export, the 4 + 4 split. Do not skip it: none of this has run on either node yet.
 
 ```bash
 nohup bash -c 'bash skyrl-test/opd-gcp-spot-full-repro/02_run_dapo.sh 4b --smoke && bash skyrl-test/opd-gcp-spot-full-repro/03_run_opd.sh 4b --smoke' > ~/opd-store/logs/smoke.log 2>&1 < /dev/null &
@@ -246,7 +286,11 @@ bash skyrl-test/opd-gcp-spot-full-repro/gcp/02_setup_node.sh
 bash skyrl-test/opd-gcp-spot-full-repro/gcp/03_start_ray.sh
 ```
 
-A stopped VM can only restart in the zone it is in, so the first command waits for capacity there.
+A stopped VM can only restart in the zone it is in and as the machine type it is, so the first command
+waits for capacity there. If that zone stays empty, the way out is `gcp/down.sh delete` and a new VM from
+A2, of either kind, in any zone. It starts with an empty disk: the unfinished run starts over (unless
+`OPD_CKPT_ROOT` pointed at GCS), finished runs are on the Hub, and the teacher can be loaded from there
+with `OPD_TEACHER_MODEL=kyuds/opd-gcp-spot-full-repro-dapo-qwen3-4b-base-step90`.
 
 Then on the VM: B1, B2 (the data is still there; the models download again), and the same B4 command as
 before. Run names are fixed, so a run resumes from its last checkpoint, and `04_run_all.sh` skips the
@@ -331,17 +375,27 @@ Verified on 2026-10-05, from the Mac, without a GPU or a VM:
 - The Mac-side `gcp/` scripts against a stand-in for `gcloud`: create with retries, the unpushed-branch
   guard, driver + reboot + storage + polled software phase, Ray start, the key push (values arrive
   intact and never appear on a command line), status, stop.
-- Read-only queries against the project (2026-10-05): the image family resolves, the subnet `b200-vpc`
-  exists in `us-west3`, `a4-highgpu-8g` is offered in `us-west3-b` with 8 B200s, and a firewall rule on
-  `b200-vpc` allows ssh from outside.
+- The Mac-side `gcp/` scripts against the same stand-in, for two kinds of node: B200 preferred, H100 taken
+  when no B200 zone has capacity, quota and other refusals dropped as described in A2, the later scripts
+  finding either VM, restart in place, delete, and a leftover record from an interrupted run.
+- Read-only queries against the project (2026-10-05): the image family resolves; `a4-highgpu-8g` and
+  `a3-highgpu-8g` are offered in the zones listed in `gcp/config.sh`; `b200-vpc` is an auto-mode network
+  with a subnet in each of their regions; a firewall rule on it allows ssh from outside, for any tag.
+- Real requests for the B200 node (2026-10-05) in `us-west3-b`, `us-west3-c`, `us-south1-b` and
+  `us-central1-b`: all accepted, all refused for capacity. So the request is well-formed and quota is not
+  what stops it there.
 
 Not verified:
 
-- Creating the VM and everything after it. The first attempt, on 2026-10-05, stopped at the retired image
-  family, which is what led to the current default.
+- A VM actually coming up, and everything after it. The first attempt, on 2026-10-05, stopped at the
+  retired image family, which is what led to the current default; the ones after it found no capacity.
+- Anything about the H100 node on real hardware: that the project has H100 quota, that the request is
+  accepted as written (it names a `pd-balanced` boot disk, which the A3 is documented to support), that the
+  16-SSD array assembles, and that the OPD runs fit in 80 GB (see "How many GPUs, and which").
 - `gcp/node_setup.sh`, the part that runs on the VM (driver install, NVMe array, `uv`, checkouts, Ray). It
   needs Linux and has only been syntax-checked. Expect to fix something in it on the first real node.
-- That this stack runs on B200s at all (the smoke test is the first check), and how long a step takes.
+- That this stack runs on B200s at all (the smoke test is the first check), and how long a step takes on
+  either node.
 - That the node setup works on the `pytorch-2-9` image. The guide's steps were written for the retired
   `pytorch-2-7` image; this one differs at least in shipping driver 580 already.
 - That an `a4-highgpu-8g` accepts a single network interface. The guide attaches ten for multi-node RDMA;

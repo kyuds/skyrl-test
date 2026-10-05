@@ -6,6 +6,7 @@
 # Either way the NVMe array (HF and uv caches) is discarded. Anything not uploaded to the Hub is gone after `delete`.
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
+case "${1:-}" in stop|delete) need_vm ;; esac
 case "${1:-}" in
   stop)
     gcloud compute instances stop "$GCP_VM" --project "$GCP_PROJECT" --zone "$GCP_ZONE" --discard-local-ssd=true ;;

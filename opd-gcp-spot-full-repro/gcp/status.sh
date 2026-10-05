@@ -4,8 +4,9 @@
 #   bash skyrl-test/opd-gcp-spot-full-repro/gcp/status.sh
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
+if [[ -z "$GCP_VM" ]]; then echo "vm     : none (looked for $(kind_vm b200) and $(kind_vm h100) in $GCP_PROJECT)"; exit 0; fi
 st="$(vm_status)"
-echo "vm     : $GCP_VM  ${st:-DOES NOT EXIST}  ($GCP_PROJECT / $GCP_ZONE)"
+echo "vm     : $GCP_VM  ${st:-DOES NOT EXIST}  (${GCP_VM_TYPE:-?}, $GCP_PROJECT / $GCP_ZONE)"
 case "$st" in
   RUNNING) ;;
   TERMINATED) echo "stopped or preempted. Bring it back: gcp/01_create_vm.sh, gcp/02_setup_node.sh, gcp/03_start_ray.sh, then re-run the same run command on the VM."; exit 0 ;;

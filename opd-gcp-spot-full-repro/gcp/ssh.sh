@@ -5,4 +5,5 @@
 #   bash skyrl-test/opd-gcp-spot-full-repro/gcp/ssh.sh -- -L 8265:localhost:8265         # shell + Ray dashboard on localhost:8265
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
+need_vm
 gssh "$@"

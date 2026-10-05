@@ -7,6 +7,7 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
 case "${1:-}" in ""|--restart) ;; *) echo "usage: $0 [--restart]" >&2; exit 2 ;; esac
+need_vm
 gscp "$GCP_DIR/node_setup.sh" "$GCP_VM:~/opd_node_setup.sh" >/dev/null
 gssh --command "bash ~/opd_node_setup.sh ray ${1:-}"
 echo "Next: bash skyrl-test/opd-gcp-spot-full-repro/gcp/04_push_secrets.sh   (once per VM), then gcp/ssh.sh"

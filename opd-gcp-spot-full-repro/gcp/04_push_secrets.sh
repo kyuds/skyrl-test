@@ -9,5 +9,6 @@ set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
 : "${WANDB_API_KEY:?export WANDB_API_KEY in this shell first}"
 : "${HF_TOKEN:?export HF_TOKEN (a Hugging Face write token) in this shell first}"
+need_vm
 printf 'export WANDB_API_KEY=%q\nexport HF_TOKEN=%q\n' "$WANDB_API_KEY" "$HF_TOKEN" |
   gssh --command 'umask 077; cat > ~/.opd_secrets; chmod 600 ~/.opd_secrets; echo "wrote ~/.opd_secrets on $(hostname): $(wc -l < ~/.opd_secrets | tr -d " ") keys"'

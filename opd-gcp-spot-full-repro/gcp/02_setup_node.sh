@@ -8,8 +8,9 @@
 # Push the kit branch first: the VM clones it from GitHub.
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
+need_vm
 [[ "$(vm_status)" == "RUNNING" ]] || { echo "$GCP_VM is not running: bash gcp/01_create_vm.sh" >&2; exit 1; }
-echo "node $GCP_VM   SkyRL $SKYRL_BRANCH   kit $KIT_BRANCH"
+echo "node $GCP_VM (${GCP_VM_TYPE:-?}, $GCP_ZONE)   SkyRL $SKYRL_BRANCH   kit $KIT_BRANCH"
 if ! git -C "$GCP_DIR" ls-remote --exit-code --heads "$KIT_REPO" "$KIT_BRANCH" >/dev/null 2>&1; then
   echo "branch $KIT_BRANCH is not on $KIT_REPO yet: push it first (the VM clones the kit from there)" >&2; exit 1
 fi
