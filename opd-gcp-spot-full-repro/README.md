@@ -49,40 +49,13 @@ at the PR head) and from the post's W&B report.
 | How long does each run go? | The scripts say `epochs=20` (about 680 steps); the post never says when a run was stopped. The report's curves end near 90 (run 1), 30 (run 2), 60–70 (run 3), 230 (run 4; the text says "~200"). | 90 / 30 / 60 / 200 (`DAPO_MAX_STEPS`, `OPD_MAX_STEPS`). Read off charts. |
 | What hardware? | Not stated. The DAPO 4B script is written for 2 nodes × 8 GPUs, the other three for 1 × 8; no GPU model is named. The report's run table shows runtimes of 2 to 5 days (names truncated, so not mapped to runs). | 8 B200s for everything. Run 1 uses 8 ranks instead of 16 with the same mini-batch (32), optimizer steps per batch (16) and micro-batch (4). |
 | Where does the teacher run? | In the post it is the reference-model slot: an FSDP forward on the student's own 8 GPUs. | The entrypoint under test serves it from vLLM engines on GPUs of its own: student 4, teacher 4. This is the thing being tested, not a free choice. |
-| How is the OPD loss aggregated? | The post divides the sum of per-token losses by a fixed constant (`seq_mean_token_sum_norm`, hardcoded in its example). The entrypoint defaults to `token_mean`, which divides by the batch's response-token count. The two differ by a factor that drifts during training; see the section below. | The post's, set explicitly in `03_run_opd.sh`. `OPD_LOSS_REDUCTION=token_mean` runs the entrypoint's default instead. |
+| How is the OPD loss aggregated? | The post divides the sum of per-token losses by a fixed constant (`seq_mean_token_sum_norm` with `max_seq_len` = prompt + response). The entrypoint's default, `token_mean`, divides by the batch's token count, which is a different update. | The post's, passed explicitly by `03_run_opd.sh`: `loss_reduction=seq_mean_token_sum_norm`, `max_seq_len=10240` (2048 + 8192). The entrypoint's default stays `token_mean`. |
 | Are today's scripts the post's scripts? | The post is from 2025-11; the repo scripts have been edited since (for example `loss_reduction=token_mean_legacy`, added to keep the old behaviour). | Today's scripts, flag for flag. |
 | `enforce_eager` | On in the DAPO scripts ("due to instability with vLLM then"), off in the OPD scripts. | Kept as is. |
 | LR | DAPO 1e-6 with 160 warmup optimizer steps (10 batches); OPD 1e-5, no warmup. The post says 1e-5 was unstable for DAPO. | Kept as is. |
 
 One operational setting differs on purpose: checkpoints every 5 steps instead of 10 (`OPD_CKPT_INTERVAL`),
 keeping two. It changes no result and halves what a preemption costs.
-
-## The OPD loss aggregation
-
-Every response token of every rollout gets a per-token loss, `−(π_new / π_old) · advantage`, and the
-batch's loss is the sum of them divided by something. The post and the entrypoint divide by different
-things:
-
-| | Divides the token sum by | Per-step value |
-|---|---|---|
-| The post (`seq_mean_token_sum_norm`) | rollouts × `max_seq_len` = 8192 × 10240 | the same every step |
-| Entrypoint default (`token_mean`) | response tokens in this batch | changes every step |
-
-Within one step the two gradients point the same way; the post's is the entrypoint's multiplied by
-`mean response length / 10240`. That factor is below 1 and moves whenever the student's responses get
-longer or shorter. Adam cancels a factor that stays constant, but not one that moves: its second-moment
-average (β2 = 0.999) remembers the whole 30 to 60-step run, so under the post's aggregation the update
-shrinks as responses shorten and grows as they lengthen, while under `token_mean` it does not. The
-gradient clip at norm 1.0 (SkyRL's default, which neither OPD script changes) also sees larger gradients
-under `token_mean`. How much this moves the curves was not measured; it depends on how far the response
-length drifts during a run.
-
-The kit uses the post's aggregation, since the aim is the post's setup and it costs two flags:
-`trainer.algorithm.loss_reduction=seq_mean_token_sum_norm trainer.algorithm.max_seq_len=10240`
-(prompt 2048 + response 8192, which is what the post's code computed). The PR's example scripts do not
-set them, so they run `token_mean`. `OPD_LOSS_REDUCTION=token_mean` (with `OPD_TAG` for a separate run
-name) gives that variant for a side-by-side comparison. The DAPO runs are untouched: their scripts set
-`token_mean_legacy`.
 
 ## How many B200s
 
@@ -290,7 +263,6 @@ All are environment variables. The first group is read by `00_env.sh`, so set th
 | `OPD_NUM_STUDENT_GPUS`, `OPD_TEACHER_NUM_GPUS` | `4`, `4` | The OPD split. They must add up to at most 8. |
 | `DAPO_MAX_STEPS` | 90 (4b), 200 (1.7b) | Where a DAPO run stops. |
 | `OPD_MAX_STEPS` | 30 (4b), 60 (1.7b) | Where an OPD run stops. |
-| `OPD_LOSS_REDUCTION` | `seq_mean_token_sum_norm` | The OPD loss aggregation; `token_mean` is the entrypoint's default. |
 | `TEACHER_RUN`, `TEACHER_STEP` | `dapo_qwen3_4b_base`, `90` | Which export is the teacher. |
 | `OPD_TEACHER_MODEL` | unset | A path or Hub id instead of that export. A private Hub repo also needs `OPD_FORWARD_HF_TOKEN=1`. |
 | `OPD_TAG` | unset | Suffix for the run name: a fresh run of the same kind. It does not change the teacher. |
@@ -302,6 +274,13 @@ Anything after the size on a run script's command line is passed to SkyRL as ext
 
 ## Things worth knowing
 
+- **The OPD runs set the post's loss aggregation explicitly.** `03_run_opd.sh` passes
+  `trainer.algorithm.loss_reduction=seq_mean_token_sum_norm` and `trainer.algorithm.max_seq_len=10240`
+  (prompt 2048 + response 8192; 3072 in the smoke run), as the PR's two math example scripts do. The
+  post's version divides the batch's summed token losses by a constant; the entrypoint's default,
+  `token_mean`, divides by the batch's own token count, which rescales every update by that batch's
+  mean response length. To run the default instead, append `trainer.algorithm.loss_reduction=token_mean`
+  to the command (with `OPD_TAG` for a separate run name).
 - **`HF_TOKEN` is kept out of the training process.** SkyRL copies `HF_TOKEN` into the Ray runtime
   environment and logs its value while doing so (`prepare_runtime_environment` in
   `skyrl/train/utils/utils.py`), so a run started with the token set writes it into its own log. The run

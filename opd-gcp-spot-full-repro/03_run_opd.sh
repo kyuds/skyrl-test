@@ -4,8 +4,9 @@
 #   03_run_opd.sh 1.7b    Qwen3-1.7B-Base <- DAPO-trained 4B   ("distilling into a smaller model")
 # The flags are examples/train/on_policy_distillation/run_on_policy_distill_math_qwen3_4b.sh (and its 1.7b
 # twin) from PR #2256: batch 512 x 16 with no mini-batching (one optimizer step per batch), LR 1e-5, no
-# warmup, kl_coef 1.0, no task reward, micro-batches of 2, enforce_eager off. Run 02_run_dapo.sh 4b first.
-# One flag is added to those scripts: the loss aggregation of the post (OPD_LOSS_REDUCTION below).
+# warmup, kl_coef 1.0, no task reward, micro-batches of 2, enforce_eager off, and the post's loss aggregation
+# (seq_mean_token_sum_norm with max_seq_len = prompt + response; the entrypoint's default is token_mean).
+# Run 02_run_dapo.sh 4b first.
 #
 # Teacher: the HF export of the DAPO 4B run at step TEACHER_STEP (90), read from this node's disk and served
 # by the run itself (trainer.teacher.backend=skyrl) as OPD_TEACHER_NUM_GPUS TP-1 vLLM servers. The student
@@ -53,28 +54,23 @@ if [[ $SMOKE == 1 ]]; then
          generator.sampling_params.max_generate_length=1024 generator.eval_sampling_params.max_generate_length=1024
          generator.eval_n_samples_per_prompt=1 trainer.eval_interval=2
          trainer.max_training_steps=2 trainer.epochs=1 trainer.ckpt_interval=2 trainer.hf_save_interval=2
-         trainer.resume_mode=none trainer.algorithm.max_seq_len=3072)
+         trainer.resume_mode=none)
+  MAX_SEQ_LEN=$((2048 + 1024))
 else
   case "$MODEL_TAG" in 4b) STEPS=30 ;; *) STEPS=60 ;; esac
   STEPS="${OPD_MAX_STEPS:-$STEPS}"
   RUN_NAME="opd_qwen3_${MODEL_TAG}_base_from_${TEACHER_TAG}${OPD_TAG:+_$OPD_TAG}"
   EXTRA=(trainer.max_training_steps="$STEPS")
+  MAX_SEQ_LEN=$((2048 + 8192))   # max prompt length + max response length (TASK_OPTS in _common.sh)
   opd_skip_if_done "$RUN_NAME"
 fi
 opd_check_data
 NUM_GPUS="${OPD_NUM_STUDENT_GPUS:-4}"
-# How the per-token losses of a batch become one number. The post's OPD loss divides the token sum by a fixed
-# constant, batch size x max_seq_len with max_seq_len = prompt 2048 + response 8192 (seq_mean_token_sum_norm,
-# hardcoded in its example). The entrypoint's default, token_mean, divides by the number of response tokens in
-# the batch, which changes from step to step, so the two differ by a factor that drifts as the student's
-# responses get longer or shorter (README, "The OPD loss aggregation"). OPD_LOSS_REDUCTION=token_mean runs
-# the entrypoint's default; max_seq_len is ignored by every reduction but the post's.
-LOSS_REDUCTION="${OPD_LOSS_REDUCTION:-seq_mean_token_sum_norm}"
 TEACHER_GPUS="${OPD_TEACHER_NUM_GPUS:-4}"
 opd_run_opts "$RUN_NAME" "$NUM_GPUS"
 echo "$RUN_NAME" > "$LOGS/last_run"
 echo "$TEACHER" > "$LOGS/$RUN_NAME.teacher"
-echo "run_name=$RUN_NAME  method=OPD  student=$MODEL_ID on $NUM_GPUS GPUs  teacher=$TEACHER on $TEACHER_GPUS GPUs (launched by the run)  loss_reduction=$LOSS_REDUCTION"
+echo "run_name=$RUN_NAME  method=OPD  student=$MODEL_ID on $NUM_GPUS GPUs  teacher=$TEACHER on $TEACHER_GPUS GPUs (launched by the run)"
 
 # The teacher block's own defaults are not repeated: gpu_memory_utilization 0.9, prefix caching off, and
 # max_model_len = longest input + longest response + 1 (2048 + 8192 + 1 = 10241). If the previous run's GPUs
@@ -90,8 +86,8 @@ opd_uv_run -m skyrl.train.entrypoints.main_opd \
   trainer.teacher.max_concurrency="${OPD_TEACHER_MAX_CONCURRENCY:-64}" \
   trainer.algorithm.opd.kl_coef=1.0 \
   trainer.algorithm.opd.use_task_reward=false \
-  trainer.algorithm.loss_reduction="$LOSS_REDUCTION" \
-  trainer.algorithm.max_seq_len=10240 \
+  trainer.algorithm.loss_reduction=seq_mean_token_sum_norm \
+  trainer.algorithm.max_seq_len="$MAX_SEQ_LEN" \
   generator.inference_engine.enforce_eager=false \
   trainer.policy_mini_batch_size=512 \
   trainer.micro_forward_batch_size_per_gpu=2 \
