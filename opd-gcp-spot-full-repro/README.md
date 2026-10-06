@@ -188,6 +188,16 @@ Ray, finished and uploaded runs, the tail of the newest log):
 bash skyrl-test/opd-gcp-spot-full-repro/gcp/status.sh
 ```
 
+If a `gcp/` script says gcloud could not list the VMs, your `gcloud` login has expired (it lasts about a
+day on this account). That is on the Mac only; the VM and the run on it carry on. Log in again:
+
+```bash
+gcloud auth login
+```
+
+A run's W&B page is the other way to see whether it is alive: its heartbeat and GPU charts stop within
+seconds of a preemption.
+
 ## Part B. On the VM: run the experiment
 
 Everything below runs in `~/SkyRL`, in bash. Long steps are started with `nohup`, so closing the ssh

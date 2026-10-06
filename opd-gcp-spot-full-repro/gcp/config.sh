@@ -81,8 +81,18 @@ kind_vm() { echo "${GCP_VM_FIXED:-$GCP_VM_BASE-$1}"; }
 vm_find() {
   local pat rows
   if [[ -n "$GCP_VM_FIXED" ]]; then pat="^$GCP_VM_FIXED\$"; else pat="^$GCP_VM_BASE-(b200|h100)\$"; fi
-  rows="$(gcloud compute instances list --project "$GCP_PROJECT" --filter="name~'$pat'" --format='value(name,zone.basename(),machineType.basename())' 2>/dev/null || true)"
   GCP_VM=""; GCP_ZONE=""; GCP_VM_TYPE=""
+  # A lookup that fails must not read as "there is no VM": gcloud's login expires after about a day on this
+  # account, and from then on every call fails while the VM and the run on it carry on.
+  if ! rows="$(gcloud compute instances list --project "$GCP_PROJECT" --filter="name~'$pat'" --format='value(name,zone.basename(),machineType.basename())' 2>/dev/null)"; then
+    rows="$(gcloud compute instances list --project "$GCP_PROJECT" --filter="name~'$pat'" --format='value(name)' 2>&1 >/dev/null || true)"
+    echo "gcloud could not list the project's VMs, so whether the VM is there is not known:" >&2
+    head -4 <<<"$rows" | sed 's/^/  /' >&2
+    if grep -qiE 'reauth|auth login|credentials' <<<"$rows"; then
+      echo "Your gcloud login has expired. Run:  gcloud auth login   The VM and any run on it are not affected." >&2
+    fi
+    return 1
+  fi
   [[ -n "$rows" ]] || return 0
   if [[ "$(wc -l <<<"$rows" | tr -d ' ')" -gt 1 ]]; then
     echo "more than one VM matches; pick one with GCP_VM=<name> GCP_ZONE=<zone>:" >&2
@@ -104,10 +114,19 @@ need_vm() {
 
 gssh() { gcloud compute ssh "$GCP_VM" --project "$GCP_PROJECT" --zone "$GCP_ZONE" "$@"; }
 gscp() { gcloud compute scp --project "$GCP_PROJECT" --zone "$GCP_ZONE" "$@"; }
-# RUNNING, TERMINATED (stopped or preempted), ..., or empty when the VM does not exist
+# RUNNING, TERMINATED (stopped or preempted), ..., empty when the VM does not exist, or UNKNOWN when gcloud
+# could not say (its error goes to stderr); no script creates or starts anything on UNKNOWN.
 vm_status() {
   [[ -n "$GCP_VM" ]] || return 0
-  gcloud compute instances describe "$GCP_VM" --project "$GCP_PROJECT" --zone "$GCP_ZONE" --format='value(status)' 2>/dev/null || true
+  local out
+  if out="$(gcloud compute instances describe "$GCP_VM" --project "$GCP_PROJECT" --zone "$GCP_ZONE" --format='value(status)' 2>/dev/null)"; then
+    echo "$out"; return 0
+  fi
+  out="$(gcloud compute instances describe "$GCP_VM" --project "$GCP_PROJECT" --zone "$GCP_ZONE" --format='value(status)' 2>&1 >/dev/null || true)"
+  if grep -q 'was not found' <<<"$out"; then return 0; fi
+  echo "gcloud could not read the state of $GCP_VM:" >&2
+  head -4 <<<"$out" | sed 's/^/  /' >&2
+  echo UNKNOWN
 }
 wait_ssh() {
   local i
