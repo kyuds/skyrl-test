@@ -349,6 +349,11 @@ Anything after the size on a run script's command line is passed to SkyRL as ext
 - **NCCL uses plain sockets** (`NCCL_NET=Socket`, `NCCL_NET_PLUGIN=none` in `~/.opd_cluster_env`), as the
   guide prescribes for a single node. Ray workers inherit them from the raylet, which is why
   `03_start_ray.sh` sets them before `ray start`.
+- **`ray status` says `3.2/8.0 GPU` during a DAPO run, and all 8 GPUs are in use.** That line is Ray's
+  ledger, not utilisation. The run reserves all 8 GPUs in a placement group, and on each GPU two actors
+  share it, a training worker and a vLLM engine, each registered for 0.2 GPU: 16 × 0.2 = 3.2. `nvidia-smi`
+  is the place to look. Measured on run 1 (8×H100): every GPU at 86–100% during training; during
+  generation all 8 engines are busy until the last 20 s or so of the phase.
 - **Ray's version is the lockfile's.** The cluster is started from SkyRL's base environment
   (`~/venvs/skyrl`), so the runs need no `--with ray==...` override, unlike the Anyscale node.
 - **The boot disk is 1000 GB**, twice the guide's, because it holds the checkpoints and exports of four
@@ -385,19 +390,27 @@ Verified on 2026-10-05, from the Mac, without a GPU or a VM:
   `us-central1-b`: all accepted, all refused for capacity. So the request is well-formed and quota is not
   what stops it there.
 
+Seen on a real 8×H100 node (`kyuds-opd-h100`, `us-central1-a`, created 2026-10-05 15:51 PDT), read from
+its logs and `nvidia-smi` over ssh:
+
+- The H100 request is accepted as written (`pd-balanced` boot disk, one gVNIC), the project has H100 spot
+  quota in `us-central1`, and `gcp/node_setup.sh` ran unchanged on the `pytorch-2-9` image: array, `uv`,
+  checkouts, Ray with 8 GPUs.
+- The smoke test passed (DAPO, export, OPD from that export on 4 + 4 GPUs).
+- Run 1, first five steps: about 9.1 minutes a step (generation 3.2, the forward pass 1.0, training 4.7),
+  an eval of 3.4 minutes every fifth step, a 50 GB checkpoint written in 30 s. Training peaks near 30 GB
+  per GPU. At that pace run 1 takes about 15 hours.
+- Generation is not held back by the number of GPUs: the bulk of the 8192 samples finishes in the first
+  minute, and the other two minutes are a few hundred responses running to the 8192-token limit at about
+  57 tokens a second each.
+
 Not verified:
 
-- A VM actually coming up, and everything after it. The first attempt, on 2026-10-05, stopped at the
-  retired image family, which is what led to the current default; the ones after it found no capacity.
-- Anything about the H100 node on real hardware: that the project has H100 quota, that the request is
-  accepted as written (it names a `pd-balanced` boot disk, which the A3 is documented to support), that the
-  16-SSD array assembles, and that the OPD runs fit in 80 GB (see "How many GPUs, and which").
-- `gcp/node_setup.sh`, the part that runs on the VM (driver install, NVMe array, `uv`, checkouts, Ray). It
-  needs Linux and has only been syntax-checked. Expect to fix something in it on the first real node.
-- That this stack runs on B200s at all (the smoke test is the first check), and how long a step takes on
-  either node.
-- That the node setup works on the `pytorch-2-9` image. The guide's steps were written for the retired
-  `pytorch-2-7` image; this one differs at least in shipping driver 580 already.
+- That the OPD runs fit in 80 GB at full length (see "How many GPUs, and which"); the smoke test only
+  shows they start.
+- A preemption and a resume on real hardware.
+- Anything on a B200 node: no B200 VM has come up (stockouts in all four zones on 2026-10-05), so the
+  B200 path stops at an accepted request.
 - That an `a4-highgpu-8g` accepts a single network interface. The guide attaches ten for multi-node RDMA;
   this kit attaches one.
 - The step counts and the teacher step, which are read off the post's charts and one old script.
