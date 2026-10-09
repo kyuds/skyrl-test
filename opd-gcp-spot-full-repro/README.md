@@ -37,6 +37,42 @@ per answer, so `eval/all/avg_score` runs from −1 to 1):
 - Run 4 sits near −0.75 after 200 steps. Run 3 gets there in about 20 steps and keeps improving.
 - `opd/reverse_kl` flattens near 0.01 for run 2 and near 0.09 for run 3.
 
+## How the results compare with the post
+
+Checked 2026-10-08, with run 4 at step 140 of 200. The post's two DAPO runs are in the lab's own W&B team
+(`sky-posttraining-uc-berkeley/skyrl-train-dapo-aime`, runs `gzqrygfj` and `a1lxa0jj`), so their configs
+and curves were compared directly; its two OPD runs were read from the post's W&B report.
+
+| | Post | Here |
+|---|---|---|
+| Run 1, DAPO 4B: eval score at step 90 | −0.510 | −0.548 |
+| Run 1: average response length at step 90 | 2,828 tokens | 1,581 tokens |
+| Run 1: train reward at step 90 | −0.015 | −0.093 |
+| Run 2, OPD 4B: eval score, mean of steps 15–30 | −0.521 | −0.570 |
+| Run 2: reverse KL at step 1 / step 30 | 0.093 / 0.0068 | 0.096 / 0.0069 |
+| Run 2: average response length, steps 10–30 | about 2,750 tokens | about 1,630 tokens |
+| Run 3, OPD 1.7B: eval score, mean of steps 15–60 | −0.721 | −0.763 |
+| Run 3: reverse KL at step 60 | 0.088 | 0.095 |
+| Run 4, DAPO 1.7B: eval score at step 140 | −0.767 | −0.740 |
+
+One eval is 960 samples, so a single point moves by about ±0.03.
+
+The OPD runs here sit 0.04 to 0.05 below the post's, and the cause is the teacher, not the OPD code. Run 2's
+reverse KL follows the post's almost point for point, and each student ends up writing answers as long as
+its own teacher's. The teachers differ because the DAPO example's length penalty was tightened a month
+after the post (the last row of the table below): the post's DAPO model grew to 2,800-token answers, the
+one trained here stays near 1,600 and scores a little lower. Eric's own rerun of the 4B DAPO recipe a week
+after that change (`h4il9yb1`, 2025-12-16) looks like the run here: about 1,800 tokens and −0.542 at
+step 90. That rerun, like this kit, also used 8 GPUs where the post's DAPO runs used 16; nothing in the
+update depends on the rank count as far as the code shows, but the two were not separated by an experiment.
+
+Everything else was compared and matches: the logged configs of the post's DAPO runs against the ones here
+(batch shape, LR and warmup, clipping, overlong filtering, sampling), and for OPD the advantage
+(`−(log p_student − log p_teacher)` per response token), the importance-sampling loss, the aggregation
+constant (10240), LR 1e-5 and one optimizer step per batch. Known differences that the matching KL curve
+argues are harmless: the teacher's logprobs come from a vLLM server here and from an FSDP forward pass in
+the post; `enforce_eager` is off for OPD here and was on in the post; the student has 4 GPUs, not 8.
+
 ## Where the post's recipe is ambiguous
 
 The post's four "Full training script" bullets have no link behind them, so the settings below come from
@@ -51,7 +87,7 @@ at the PR head) and from the post's W&B report.
 | What hardware? | The post does not say. The repo's DAPO README lists "8xH100" for its Qwen3-4B and Qwen3-1.7B reference runs, though the 4B script is written for 2 nodes × 8 GPUs (the other three for 1 × 8). Nothing names the hardware of the OPD runs. The report's run table shows runtimes of 2 to 5 days (names truncated, so not mapped to runs). | One 8-GPU node for everything, B200s or H100s. Run 1 uses 8 ranks instead of 16 with the same mini-batch (32), optimizer steps per batch (16) and micro-batch (4). |
 | Where does the teacher run? | In the post it is the reference-model slot: an FSDP forward on the student's own 8 GPUs. | The entrypoint under test serves it from vLLM engines on GPUs of its own: student 4, teacher 4. This is the thing being tested, not a free choice. |
 | How is the OPD loss aggregated? | The post divides the sum of per-token losses by a fixed constant (`seq_mean_token_sum_norm` with `max_seq_len` = prompt + response). The entrypoint's default, `token_mean`, divides by the batch's token count, which is a different update. | The post's, passed explicitly by `03_run_opd.sh`: `loss_reduction=seq_mean_token_sum_norm`, `max_seq_len=10240` (2048 + 8192). The entrypoint's default stays `token_mean`. |
-| Are today's scripts the post's scripts? | The post is from 2025-11; the repo scripts have been edited since (for example `loss_reduction=token_mean_legacy`, added to keep the old behaviour). | Today's scripts, flag for flag. |
+| Are today's scripts the post's scripts? | The post is from 2025-11; the repo scripts have been edited since (for example `loss_reduction=token_mean_legacy`, added to keep the old behaviour). One change is in code, not in a flag: on 2025-12-08 ([SkyRL #755](https://github.com/NovaSky-AI/SkyRL/pull/755)) the DAPO example's soft overlong punishment moved from "starts at `2048 + 8192 − 4096 − prompt length`, about 5,900 tokens, and reaches about −0.55 at the limit" to "starts at 4096 and reaches −1.0". | Today's scripts and today's code, so the DAPO runs here use the stricter length penalty. See "How the results compare with the post". |
 | `enforce_eager` | On in the DAPO scripts ("due to instability with vLLM then"), off in the OPD scripts. | Kept as is. |
 | LR | DAPO 1e-6 with 160 warmup optimizer steps (10 batches); OPD 1e-5, no warmup. The post says 1e-5 was unstable for DAPO. | Kept as is. |
 
@@ -366,8 +402,13 @@ Anything after the size on a run script's command line is passed to SkyRL as ext
   generation all 8 engines are busy until the last 20 s or so of the phase.
 - **Ray's version is the lockfile's.** The cluster is started from SkyRL's base environment
   (`~/venvs/skyrl`), so the runs need no `--with ray==...` override, unlike the Anyscale node.
-- **The boot disk is 1000 GB**, twice the guide's, because it holds the checkpoints and exports of four
-  runs. It is slower than the NVMe array; a 4B checkpoint will take minutes to write.
+- **The boot disk is 1000 GB, and the four runs fill it unless the smoke test's leftovers are deleted.**
+  On 2026-10-08 run 4 finished its 200th step and then died writing the final checkpoint, with the disk
+  at 969 of 969 GB. What the runs wrote: 409 GB of checkpoints (a 4B checkpoint is 50 GB, a 1.7B one
+  23 GB, two kept per run, a third while rotating) and 507 GB of exports (17 GB and 8 GB each, never
+  pruned, written every 10 steps and also at steps 33, 66, 99, ..., which look like end-of-epoch saves).
+  The smoke test alone leaves 134 GB behind. After it passes, remove
+  `~/opd-store/ckpts/opd_gcp_spot_full_repro/smoke_*` and `~/opd-store/exports/opd_gcp_spot_full_repro/smoke_*`.
 
 ## Files
 
