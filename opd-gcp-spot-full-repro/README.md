@@ -1,0 +1,467 @@
+# Reproducing the blog's OPD result on one spot 8-GPU node (B200 or H100)
+
+Written 2026-10-05. The 4×H100 experiment ([kyuds/skyrl-test#1](https://github.com/kyuds/skyrl-test/pull/1))
+had naive GRPO beat OPD for a Qwen3.5-0.8B student on GSM8K (best eval 0.85 against 0.72 and 0.71), and a
+0.8B student may simply be too small to say anything about OPD. This kit instead reruns the exact setup
+of the NovaSky post [On-Policy Distillation in SkyRL](https://novasky-ai.notion.site/on-policy-distillation)
+through the new entrypoint (`skyrl.train.entrypoints.main_opd`,
+[PR #2256](https://github.com/NovaSky-AI/SkyRL/pull/2256), branch `kyuds/opd-entrypoint`):
+RL-train Qwen3-4B-Base with the DAPO recipe, then distil that model back into Qwen3-4B-Base and into
+Qwen3-1.7B-Base.
+
+It runs on one spot 8-GPU VM on GCP: an `a4-highgpu-8g` (8 × B200) or, when none can be had, an
+`a3-highgpu-8g` (8 × H100). The setup follows Charlie's guide
+[Running SkyRL on GCP Spot B200s](https://gist.github.com/CharlieFRuan/6eeae93d70ede0e81f12f91a4eb74d57)
+cut down to a single node.
+
+## The four runs
+
+No 32B model is trained anywhere in the post: Qwen3-32B only appears in the snippet that shows how to
+name a teacher. The results come from these four runs, all on DAPO-Math-17k with AIME 2024 as the eval.
+
+| # | Run name | Method | Model | GPUs here | Steps | Script |
+|---|---|---|---|---|---|---|
+| 1 | `dapo_qwen3_4b_base` | DAPO (RL) | Qwen3-4B-Base | 8 | 90 | `02_run_dapo.sh 4b` |
+| 2 | `opd_qwen3_4b_base_from_dapo4b_s90` | OPD | Qwen3-4B-Base ← run 1 | 4 student + 4 teacher | 30 | `03_run_opd.sh 4b` |
+| 3 | `opd_qwen3_1p7b_base_from_dapo4b_s90` | OPD | Qwen3-1.7B-Base ← run 1 | 4 student + 4 teacher | 60 | `03_run_opd.sh 1.7b` |
+| 4 | `dapo_qwen3_1p7b_base` | DAPO (RL) | Qwen3-1.7B-Base | 8 | 200 | `02_run_dapo.sh 1.7b` |
+
+Run 1 is both the teacher and the 4B RL curve. Run 4 is only the curve that run 3 is compared against,
+and it is the longest, so it goes last. Every run needs the whole node, so they go one after another;
+`04_run_all.sh` does that.
+
+What the post reports, read off its W&B report (small charts, so approximate; AIME scores are +1 / −1
+per answer, so `eval/all/avg_score` runs from −1 to 1):
+
+- Run 1 climbs from about −0.95 to about −0.5 by step 90. Run 2 reaches the same level in about 20 steps.
+- Run 4 sits near −0.75 after 200 steps. Run 3 gets there in about 20 steps and keeps improving.
+- `opd/reverse_kl` flattens near 0.01 for run 2 and near 0.09 for run 3.
+
+## How the results compare with the post
+
+Checked 2026-10-08, with run 4 at step 140 of 200. The post's two DAPO runs are in the lab's own W&B team
+(`sky-posttraining-uc-berkeley/skyrl-train-dapo-aime`, runs `gzqrygfj` and `a1lxa0jj`), so their configs
+and curves were compared directly; its two OPD runs were read from the post's W&B report.
+
+| | Post | Here |
+|---|---|---|
+| Run 1, DAPO 4B: eval score at step 90 | −0.510 | −0.548 |
+| Run 1: average response length at step 90 | 2,828 tokens | 1,581 tokens |
+| Run 1: train reward at step 90 | −0.015 | −0.093 |
+| Run 2, OPD 4B: eval score, mean of steps 15–30 | −0.521 | −0.570 |
+| Run 2: reverse KL at step 1 / step 30 | 0.093 / 0.0068 | 0.096 / 0.0069 |
+| Run 2: average response length, steps 10–30 | about 2,750 tokens | about 1,630 tokens |
+| Run 3, OPD 1.7B: eval score, mean of steps 15–60 | −0.721 | −0.763 |
+| Run 3: reverse KL at step 60 | 0.088 | 0.095 |
+| Run 4, DAPO 1.7B: eval score at step 140 | −0.767 | −0.740 |
+
+One eval is 960 samples, so a single point moves by about ±0.03.
+
+The OPD runs here sit 0.04 to 0.05 below the post's, and the cause is the teacher, not the OPD code. Run 2's
+reverse KL follows the post's almost point for point, and each student ends up writing answers as long as
+its own teacher's. The teachers differ because the DAPO example's length penalty was tightened a month
+after the post (the last row of the table below): the post's DAPO model grew to 2,800-token answers, the
+one trained here stays near 1,600 and scores a little lower. Eric's own rerun of the 4B DAPO recipe a week
+after that change (`h4il9yb1`, 2025-12-16) looks like the run here: about 1,800 tokens and −0.542 at
+step 90. That rerun, like this kit, also used 8 GPUs where the post's DAPO runs used 16; nothing in the
+update depends on the rank count as far as the code shows, but the two were not separated by an experiment.
+
+Everything else was compared and matches: the logged configs of the post's DAPO runs against the ones here
+(batch shape, LR and warmup, clipping, overlong filtering, sampling), and for OPD the advantage
+(`−(log p_student − log p_teacher)` per response token), the importance-sampling loss, the aggregation
+constant (10240), LR 1e-5 and one optimizer step per batch. Known differences that the matching KL curve
+argues are harmless: the teacher's logprobs come from a vLLM server here and from an FSDP forward pass in
+the post; `enforce_eager` is off for OPD here and was on in the post; the student has 4 GPUs, not 8.
+
+## Where the post's recipe is ambiguous
+
+The post's four "Full training script" bullets have no link behind them, so the settings below come from
+the repo's scripts for these runs (`examples/train/algorithms/dapo/run_dapo_aime_qwen3_4b_aime.sh`,
+`run_dapo_qwen3_1.7b_aime.sh`, and `examples/train/on_policy_distillation/run_on_policy_distill_math_qwen3_{4b,1.7b}.sh`
+at the PR head) and from the post's W&B report.
+
+| Question | What the sources say | What this kit does |
+|---|---|---|
+| Which checkpoint of run 1 is the teacher? | The post: "the resulting model". The pre-PR OPD scripts on `main` hardcode `~/ckpts/dapo_qwen3_4b_base/global_step_90/`, and the report's DAPO 4B curve ends near step 90. | Step 90 (`TEACHER_STEP`). An assumption from those two hints. |
+| How long does each run go? | The scripts say `epochs=20` (about 680 steps); the post never says when a run was stopped. The report's curves end near 90 (run 1), 30 (run 2), 60–70 (run 3), 230 (run 4; the text says "~200"). The repo's DAPO README gives 90 and 225 steps for its Qwen3-4B and Qwen3-1.7B reference runs. | 90 / 30 / 60 / 200 (`DAPO_MAX_STEPS`, `OPD_MAX_STEPS`). Read off charts. |
+| What hardware? | The post does not say. The repo's DAPO README lists "8xH100" for its Qwen3-4B and Qwen3-1.7B reference runs, though the 4B script is written for 2 nodes × 8 GPUs (the other three for 1 × 8). Nothing names the hardware of the OPD runs. The report's run table shows runtimes of 2 to 5 days (names truncated, so not mapped to runs). | One 8-GPU node for everything, B200s or H100s. Run 1 uses 8 ranks instead of 16 with the same mini-batch (32), optimizer steps per batch (16) and micro-batch (4). |
+| Where does the teacher run? | In the post it is the reference-model slot: an FSDP forward on the student's own 8 GPUs. | The entrypoint under test serves it from vLLM engines on GPUs of its own: student 4, teacher 4. This is the thing being tested, not a free choice. |
+| How is the OPD loss aggregated? | The post divides the sum of per-token losses by a fixed constant (`seq_mean_token_sum_norm` with `max_seq_len` = prompt + response). The entrypoint's default, `token_mean`, divides by the batch's token count, which is a different update. | The post's, passed explicitly by `03_run_opd.sh`: `loss_reduction=seq_mean_token_sum_norm`, `max_seq_len=10240` (2048 + 8192). The entrypoint's default stays `token_mean`. |
+| Are today's scripts the post's scripts? | The post is from 2025-11; the repo scripts have been edited since (for example `loss_reduction=token_mean_legacy`, added to keep the old behaviour). One change is in code, not in a flag: on 2025-12-08 ([SkyRL #755](https://github.com/NovaSky-AI/SkyRL/pull/755)) the DAPO example's soft overlong punishment moved from "starts at `2048 + 8192 − 4096 − prompt length`, about 5,900 tokens, and reaches about −0.55 at the limit" to "starts at 4096 and reaches −1.0". | Today's scripts and today's code, so the DAPO runs here use the stricter length penalty. See "How the results compare with the post". |
+| `enforce_eager` | On in the DAPO scripts ("due to instability with vLLM then"), off in the OPD scripts. | Kept as is. |
+| LR | DAPO 1e-6 with 160 warmup optimizer steps (10 batches); OPD 1e-5, no warmup. The post says 1e-5 was unstable for DAPO. | Kept as is. |
+
+One operational setting differs on purpose: checkpoints every 5 steps instead of 10 (`OPD_CKPT_INTERVAL`),
+keeping two. It changes no result and halves what a preemption costs.
+
+## How many GPUs, and which
+
+Eight, on one node. The post's largest run was written for 16 GPUs, but no model here is larger than 4B, so
+nothing needs a second node. That removes the RDMA networks, multi-node NCCL and a shared filesystem from
+the setup. The cost is wall clock: the four runs are sequential.
+
+`gcp/01_create_vm.sh` takes either of two nodes, whichever has spot capacity first:
+
+| | `a4-highgpu-8g` | `a3-highgpu-8g` |
+|---|---|---|
+| GPUs | 8 × B200, 180 GB each | 8 × H100, 80 GB each |
+| Asked for | first, every round | after the B200 zones, every round |
+| VM name | `kyuds-opd-b200` | `kyuds-opd-h100` |
+| Local SSDs (caches) | 32 × 375 GB | 16 × 375 GB |
+
+Everything after the VM exists is the same on both. The run scripts pass GPU counts, never a GPU model, and
+their memory settings (micro-batch sizes, `gpu_memory_utilization`) are the repo scripts' own. What an H100
+node changes:
+
+- **Memory, DAPO runs (1 and 4).** The repo lists 8×H100 for its DAPO reference runs of both models, and
+  the micro-batch sizes here are that recipe's. One difference: run 1 here has 8 ranks where its script has
+  16, so each GPU holds twice the share of the weights and optimizer state, a few GB more. Not run.
+- **Memory, OPD runs (2 and 3).** The student trains on 4 GPUs with micro-batches of 2, half of run 1's 4 at
+  the same sequence length, and each teacher GPU holds one 4B model. Not run. If the student runs out of
+  memory, append `trainer.micro_train_batch_size_per_gpu=1 trainer.micro_forward_batch_size_per_gpu=1` to
+  the command: with the OPD runs' loss aggregation the micro-batch size changes memory only, not the update.
+  (That is not true of the DAPO runs: `token_mean_legacy` averages per micro-batch.)
+- **The smoke test cannot show an out-of-memory.** It caps responses at 1024 tokens. The first steps of a
+  real run are the test, as soon as a micro-batch holds responses near the 8192-token limit.
+- **Time.** An H100 is the slower card; how much slower for these runs was not measured. The post's own
+  runs took 2 to 5 days each, most likely on H100s.
+
+Nothing here measures how long a step takes on either node. Watch the first few steps of run 1 before
+trusting any estimate.
+
+## Part A. On your Mac: get the VM
+
+These scripts drive GCP through `gcloud`. Run them from `~/dev/skyrl`.
+
+**A0. Prerequisites (once).** You need access to the lab's GCP project (its id is in Charlie's guide) with
+permission to create spot VMs, and the `gcloud` CLI:
+
+```bash
+brew install --cask gcloud-cli
+```
+
+```bash
+gcloud auth login
+```
+
+```bash
+gcloud config set project <project id from Charlie's guide>
+```
+
+The project id is read from your `gcloud` config and is not written into this public repo. The scripts
+assume the network `b200-vpc` (subnet `b200-vpc`) and its firewall rule that allows ssh already
+exist, as the guide does; `gcp/config.sh` lists every setting and each can be overridden from the
+environment.
+
+**A1. Push this branch.** The VM clones the kit from GitHub, on the branch this checkout is on.
+
+**A2. Create the VM.** Spot capacity for 8-GPU nodes comes and goes. Each round the script asks for the
+B200 node in `us-west3-b`, `us-west3-c`, `us-south1-b` and `us-central1-b`, then for the H100 node in ten
+US zones, and keeps the first VM it is given. The VM is named after what it got, `kyuds-opd-b200` or
+`kyuds-opd-h100`, and every other script finds it and its zone by itself. When every request is refused
+for lack of capacity the script prints one line, waits a minute and goes round again, for up to 240
+rounds. Keep the laptop awake. It asks before it starts billing.
+
+Refusals other than capacity are not retried. A region that refuses for quota is not asked again for that
+kind of node, and a request refused for any other reason (a bad flag, permissions) is printed and that
+zone is dropped; when nothing is left the script stops. `GCP_VERBOSE=1` shows gcloud's message for every
+refusal.
+
+The guide pins `us-west3-b` because its RDMA network is zone-specific; a single node has no RDMA network,
+so any zone that offers the machine type will do, and the network has a subnet in every region. The four
+B200 zones all accepted the request on 2026-10-05 and refused it for capacity, not quota. Whether the
+project has H100 quota in the H100 zones is not known. The lists are `GCP_B200_ZONES` and `GCP_H100_ZONES`
+in `gcp/config.sh`; an empty list turns that kind off, so this asks for B200s only:
+
+```bash
+GCP_H100_ZONES= caffeinate -i bash skyrl-test/opd-gcp-spot-full-repro/gcp/01_create_vm.sh
+```
+
+The image is `pytorch-2-9-cu129-ubuntu-2204-nvidia-580`, not the guide's
+`pytorch-2-7-cu128-ubuntu-2204-nvidia-570`: every image of the guide's family was deprecated by 2026-10,
+so it no longer resolves. Google retires these families regularly; if this one goes too, the script
+lists the current ones and `GCP_IMAGE_FAMILY=<family>` selects another.
+
+Either kind, whichever comes first:
+
+```bash
+caffeinate -i bash skyrl-test/opd-gcp-spot-full-repro/gcp/01_create_vm.sh
+```
+
+**A3. Set the node up.** A driver check (SkyRL's torch is a CUDA 13 build and needs driver 580, which this
+image ships; an older image gets it installed) and one reboot for the open-file limit, the NVMe
+array at `/mnt/local_storage` for caches, then `uv`, SkyRL on `kyuds/opd-entrypoint` with this kit inside
+it (`~/SkyRL/skyrl-test`), and a warm environment. About 20 minutes on a fresh VM. The long part runs
+detached on the VM, so if the connection drops, run the same command again and it re-attaches.
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/02_setup_node.sh
+```
+
+**A4. Start Ray.** Expect it to report 8 GPUs.
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/03_start_ray.sh
+```
+
+**A5. Send your keys.** Copies `WANDB_API_KEY` and `HF_TOKEN` from your Mac's shell into `~/.opd_secrets`
+on the VM (mode 600) over ssh's stdin. `HF_TOKEN` must be a write token. Export both in the shell first.
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/04_push_secrets.sh
+```
+
+**A6. Log in.**
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/ssh.sh
+```
+
+From the Mac, at any time, this shows whether the VM is still there and what it is doing (GPUs, disks,
+Ray, finished and uploaded runs, the tail of the newest log):
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/status.sh
+```
+
+If a `gcp/` script says gcloud could not list the VMs, your `gcloud` login has expired (it lasts about a
+day on this account). That is on the Mac only; the VM and the run on it carry on. Log in again:
+
+```bash
+gcloud auth login
+```
+
+A run's W&B page is the other way to see whether it is alive: its heartbeat and GPU charts stop within
+seconds of a preemption.
+
+## Part B. On the VM: run the experiment
+
+Everything below runs in `~/SkyRL`, in bash. Long steps are started with `nohup`, so closing the ssh
+session does not stop them.
+
+**B1. Environment.** Loads the node settings and your keys, checks Ray, exports the knobs. Source it in
+every new shell before anything else.
+
+```bash
+cd ~/SkyRL && source skyrl-test/opd-gcp-spot-full-repro/00_env.sh
+```
+
+**B2. Data and models.** DAPO-Math-17k and AIME 2024 through the repo's own preparation script, plus the
+two base models into the HF cache.
+
+```bash
+nohup bash skyrl-test/opd-gcp-spot-full-repro/01_prepare_data.sh > ~/opd-store/logs/prepare.log 2>&1 < /dev/null &
+```
+
+```bash
+tail -f ~/opd-store/logs/prepare.log
+```
+
+**B3. Smoke test.** Two tiny steps of DAPO, exported, then two tiny steps of OPD with that export as the
+teacher. It exercises everything the real runs do except the upload: 8 FSDP ranks, the export, a teacher
+served from an export, the 4 + 4 split. Do not skip it: none of this has run on either node yet.
+
+```bash
+nohup bash -c 'bash skyrl-test/opd-gcp-spot-full-repro/02_run_dapo.sh 4b --smoke && bash skyrl-test/opd-gcp-spot-full-repro/03_run_opd.sh 4b --smoke' > ~/opd-store/logs/smoke.log 2>&1 < /dev/null &
+```
+
+```bash
+tail -f ~/opd-store/logs/smoke.log
+```
+
+It passed if the log ends with `=== smoke_opd_4b finished`.
+
+**B4. The four runs, back to back.**
+
+```bash
+nohup bash skyrl-test/opd-gcp-spot-full-repro/04_run_all.sh > ~/opd-store/logs/run_all.log 2>&1 < /dev/null &
+```
+
+```bash
+tail -f ~/opd-store/logs/run_all.log
+```
+
+Or one at a time, in this order (each waits for the node to be free; run 1 must finish before 2 and 3):
+
+```bash
+nohup bash skyrl-test/opd-gcp-spot-full-repro/02_run_dapo.sh 4b > ~/opd-store/logs/dapo_4b.log 2>&1 < /dev/null &
+```
+
+```bash
+nohup bash skyrl-test/opd-gcp-spot-full-repro/03_run_opd.sh 4b > ~/opd-store/logs/opd_4b.log 2>&1 < /dev/null &
+```
+
+```bash
+nohup bash skyrl-test/opd-gcp-spot-full-repro/03_run_opd.sh 1.7b > ~/opd-store/logs/opd_1p7b.log 2>&1 < /dev/null &
+```
+
+```bash
+nohup bash skyrl-test/opd-gcp-spot-full-repro/02_run_dapo.sh 1.7b > ~/opd-store/logs/dapo_1p7b.log 2>&1 < /dev/null &
+```
+
+Curves are in W&B project `opd_gcp_spot_full_repro`. Engine and worker logs are under
+`~/opd-store/logs/skyrl/<run>/`.
+
+**B5. Uploads.** A run that finishes successfully uploads its final HF export to
+`kyuds/opd-gcp-spot-full-repro-<run name>-step<N>` as a public repo, and records the URL in
+`~/opd-store/logs/<run>.uploaded`. If the upload fails the run still counts as finished (the script exits
+with status 3 and says so); running the same command again retries only the upload. By hand:
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/upload_export.sh --run dapo_qwen3_4b_base --dry-run
+```
+
+`--step N` uploads another export, `--repo` names the repo, `--private` creates the repo private, and
+`OPD_UPLOAD=0` (set before sourcing `00_env.sh`) turns the automatic upload off.
+
+## After a preemption
+
+A preempted spot VM is stopped, not deleted. Its boot disk survives, and with it `~/opd-store` (data,
+checkpoints, exports, logs, markers), the checkouts, the base environment and your keys. The NVMe array
+is wiped, so the caches go. From the Mac:
+
+```bash
+caffeinate -i bash skyrl-test/opd-gcp-spot-full-repro/gcp/01_create_vm.sh
+```
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/02_setup_node.sh
+```
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/03_start_ray.sh
+```
+
+A stopped VM can only restart in the zone it is in and as the machine type it is, so the first command
+waits for capacity there. If that zone stays empty, the way out is `gcp/down.sh delete` and a new VM from
+A2, of either kind, in any zone. It starts with an empty disk: the unfinished run starts over (unless
+`OPD_CKPT_ROOT` pointed at GCS), finished runs are on the Hub, and the teacher can be loaded from there
+with `OPD_TEACHER_MODEL=kyuds/opd-gcp-spot-full-repro-dapo-qwen3-4b-base-step90`.
+
+Then on the VM: B1, B2 (the data is still there; the models download again), and the same B4 command as
+before. Run names are fixed, so a run resumes from its last checkpoint, and `04_run_all.sh` skips the
+stages that already finished. At most 5 steps are lost. A resumed run may show up as a second W&B run
+with the same name; that was not checked.
+
+## Shutting down
+
+Stop the VM and keep its disk (you pay for the disk only; A2 brings it back):
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/down.sh stop
+```
+
+Delete the VM and its disk, which removes every checkpoint and export not uploaded (asks for the VM name):
+
+```bash
+bash skyrl-test/opd-gcp-spot-full-repro/gcp/down.sh delete
+```
+
+## Knobs
+
+All are environment variables. The first group is read by `00_env.sh`, so set them before sourcing it.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPD_UPLOAD` | `1` | Upload each finished run's final export. `0` needs no `HF_TOKEN`. |
+| `HF_USER` | `kyuds` | Hub namespace for the uploads. |
+| `OPD_STORE` | `~/opd-store` | Data, checkpoints, exports, logs. On the boot disk. |
+| `OPD_DAPO_NUM_GPUS` | `8` | GPUs of a DAPO run. |
+| `OPD_NUM_STUDENT_GPUS`, `OPD_TEACHER_NUM_GPUS` | `4`, `4` | The OPD split. They must add up to at most 8. |
+| `DAPO_MAX_STEPS` | 90 (4b), 200 (1.7b) | Where a DAPO run stops. |
+| `OPD_MAX_STEPS` | 30 (4b), 60 (1.7b) | Where an OPD run stops. |
+| `TEACHER_RUN`, `TEACHER_STEP` | `dapo_qwen3_4b_base`, `90` | Which export is the teacher. |
+| `OPD_TEACHER_MODEL` | unset | A path or Hub id instead of that export. A private Hub repo also needs `OPD_FORWARD_HF_TOKEN=1`. |
+| `OPD_TAG` | unset | Suffix for the run name: a fresh run of the same kind. It does not change the teacher. |
+| `OPD_CKPT_INTERVAL` | `5` | Steps between checkpoints. |
+| `OPD_CKPT_ROOT` | `$OPD_STORE/ckpts/<project>` | May be a `gs://` path; SkyRL then writes checkpoints to GCS, which survives losing the VM. |
+| `OPD_STAGES` | `dapo:4b opd:4b opd:1.7b dapo:1.7b` | What `04_run_all.sh` runs, in order. |
+
+Anything after the size on a run script's command line is passed to SkyRL as extra overrides.
+
+## Things worth knowing
+
+- **The OPD runs set the post's loss aggregation explicitly.** `03_run_opd.sh` passes
+  `trainer.algorithm.loss_reduction=seq_mean_token_sum_norm` and `trainer.algorithm.max_seq_len=10240`
+  (prompt 2048 + response 8192; 3072 in the smoke run), as the PR's two math example scripts do. The
+  post's version divides the batch's summed token losses by a constant; the entrypoint's default,
+  `token_mean`, divides by the batch's own token count, which rescales every update by that batch's
+  mean response length. To run the default instead, append `trainer.algorithm.loss_reduction=token_mean`
+  to the command (with `OPD_TAG` for a separate run name).
+- **`HF_TOKEN` is kept out of the training process.** SkyRL copies `HF_TOKEN` into the Ray runtime
+  environment and logs its value while doing so (`prepare_runtime_environment` in
+  `skyrl/train/utils/utils.py`), so a run started with the token set writes it into its own log. The run
+  scripts remove it from the training command's environment; only the upload sees it.
+- **NCCL uses plain sockets** (`NCCL_NET=Socket`, `NCCL_NET_PLUGIN=none` in `~/.opd_cluster_env`), as the
+  guide prescribes for a single node. Ray workers inherit them from the raylet, which is why
+  `03_start_ray.sh` sets them before `ray start`.
+- **`ray status` says `3.2/8.0 GPU` during a DAPO run, and all 8 GPUs are in use.** That line is Ray's
+  ledger, not utilisation. The run reserves all 8 GPUs in a placement group, and on each GPU two actors
+  share it, a training worker and a vLLM engine, each registered for 0.2 GPU: 16 × 0.2 = 3.2. `nvidia-smi`
+  is the place to look. Measured on run 1 (8×H100): every GPU at 86–100% during training; during
+  generation all 8 engines are busy until the last 20 s or so of the phase.
+- **Ray's version is the lockfile's.** The cluster is started from SkyRL's base environment
+  (`~/venvs/skyrl`), so the runs need no `--with ray==...` override, unlike the Anyscale node.
+- **The boot disk is 1000 GB, and the four runs fill it unless the smoke test's leftovers are deleted.**
+  On 2026-10-08 run 4 finished its 200th step and then died writing the final checkpoint, with the disk
+  at 969 of 969 GB. What the runs wrote: 409 GB of checkpoints (a 4B checkpoint is 50 GB, a 1.7B one
+  23 GB, two kept per run, a third while rotating) and 507 GB of exports (17 GB and 8 GB each, never
+  pruned, written every 10 steps and also at steps 33, 66, 99, ..., which look like end-of-epoch saves).
+  The smoke test alone leaves 134 GB behind. After it passes, remove
+  `~/opd-store/ckpts/opd_gcp_spot_full_repro/smoke_*` and `~/opd-store/exports/opd_gcp_spot_full_repro/smoke_*`.
+
+## Files
+
+On the VM: `00_env.sh` (source first), `01_prepare_data.sh`, `02_run_dapo.sh`, `03_run_opd.sh`,
+`04_run_all.sh`, `upload_export.sh`, with `_common.sh` (the task and batch shape both methods share,
+the upload hook, the done markers) and `_locate.sh` (finds the SkyRL checkout).
+
+On your Mac, in `gcp/`: `config.sh` (settings), `01_create_vm.sh`, `02_setup_node.sh`, `03_start_ray.sh`,
+`04_push_secrets.sh`, `ssh.sh`, `status.sh`, `down.sh`. `node_setup.sh` is the part that runs on the VM
+and `vm_startup.sh` is the VM's boot script; the others copy and call them.
+
+## Verified and assumed
+
+Verified on 2026-10-05, from the Mac, without a GPU or a VM:
+
+- Every run script's flags parse into the entrypoint's config and pass `validate_cfg` (and
+  `validate_opd_cfg` for OPD) at PR head `e1a51156`, for the full runs and the smoke runs.
+- The sequence logic with a stand-in for `uv`: finished stages are skipped, a failed upload is retried
+  without retraining, a failed run stops the sequence, the token is absent from the training command.
+- The Mac-side `gcp/` scripts against a stand-in for `gcloud`: create with retries, the unpushed-branch
+  guard, driver + reboot + storage + polled software phase, Ray start, the key push (values arrive
+  intact and never appear on a command line), status, stop.
+- The Mac-side `gcp/` scripts against the same stand-in, for two kinds of node: B200 preferred, H100 taken
+  when no B200 zone has capacity, quota and other refusals dropped as described in A2, the later scripts
+  finding either VM, restart in place, delete, and a leftover record from an interrupted run.
+- Read-only queries against the project (2026-10-05): the image family resolves; `a4-highgpu-8g` and
+  `a3-highgpu-8g` are offered in the zones listed in `gcp/config.sh`; `b200-vpc` is an auto-mode network
+  with a subnet in each of their regions; a firewall rule on it allows ssh from outside, for any tag.
+- Real requests for the B200 node (2026-10-05) in `us-west3-b`, `us-west3-c`, `us-south1-b` and
+  `us-central1-b`: all accepted, all refused for capacity. So the request is well-formed and quota is not
+  what stops it there.
+
+Seen on a real 8×H100 node (`kyuds-opd-h100`, `us-central1-a`, created 2026-10-05 15:51 PDT), read from
+its logs and `nvidia-smi` over ssh:
+
+- The H100 request is accepted as written (`pd-balanced` boot disk, one gVNIC), the project has H100 spot
+  quota in `us-central1`, and `gcp/node_setup.sh` ran unchanged on the `pytorch-2-9` image: array, `uv`,
+  checkouts, Ray with 8 GPUs.
+- The smoke test passed (DAPO, export, OPD from that export on 4 + 4 GPUs).
+- Run 1, first five steps: about 9.1 minutes a step (generation 3.2, the forward pass 1.0, training 4.7),
+  an eval of 3.4 minutes every fifth step, a 50 GB checkpoint written in 30 s. Training peaks near 30 GB
+  per GPU. At that pace run 1 takes about 15 hours.
+- Generation is not held back by the number of GPUs: the bulk of the 8192 samples finishes in the first
+  minute, and the other two minutes are a few hundred responses running to the 8192-token limit at about
+  57 tokens a second each.
+
+Not verified:
+
+- That the OPD runs fit in 80 GB at full length (see "How many GPUs, and which"); the smoke test only
+  shows they start.
+- A preemption and a resume on real hardware.
+- Anything on a B200 node: no B200 VM has come up (stockouts in all four zones on 2026-10-05), so the
+  B200 path stops at an accepted request.
+- That an `a4-highgpu-8g` accepts a single network interface. The guide attaches ten for multi-node RDMA;
+  this kit attaches one.
+- The step counts and the teacher step, which are read off the post's charts and one old script.
