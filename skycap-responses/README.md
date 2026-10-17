@@ -146,7 +146,7 @@ On an 8-GPU node, add for example `SKYCAP_ENGINE_ARGS="--tensor-parallel-size 4"
 bash skyrl-test/skycap-responses/gcp/tunnel.sh
 ```
 
-- **What it forwards:** `:8080`, `:8081` and `:8765` on your Mac go to the VM. It prints one line, then stays quiet until you press Ctrl-C.
+- **What it forwards:** `:8080`, `:8081` and `:8765` on your Mac go to the VM, plus `:8766` for [skycap-codex-eval](../skycap-codex-eval/README.md)'s viewer. It prints one line, then stays quiet until you press Ctrl-C.
 - **Run it again after** a preemption, a reboot, or a dropped connection.
 - **Check it from terminal A.** You should get JSON with `"mode": "tokens"`:
 
@@ -391,7 +391,7 @@ bash skyrl-test/skycap-responses/gcp/ssh.sh
 | `gcp/01_create_vm.sh` | Step 1. Creates the spot VM, retrying until there is capacity, or restarts it after a preemption |
 | `gcp/02_setup_node.sh` | Step 2. Driver, local SSDs, checkouts, environments, Node, Codex, viewer |
 | `gcp/03_serve.sh` | Step 3. vLLM, skycap `:8080` and `:8081`, and the viewer, detached on the VM. Also takes `--restart` and `--stop` |
-| `gcp/tunnel.sh` | Step 4. Forwards `:8080`, `:8081` and `:8765` to the Mac |
+| `gcp/tunnel.sh` | Step 4. Forwards `:8080`, `:8081`, `:8765` and `:8766` (skycap-codex-eval) to the Mac |
 | `gcp/alive.sh` | Whether the VM is up, from gcloud alone (no ssh). `--watch` reports each change |
 | `gcp/ssh.sh`, `gcp/status.sh` | A shell or a command on the VM; one screen of state |
 | `gcp/pull_records.sh`, `gcp/down.sh` | Step 9 |
