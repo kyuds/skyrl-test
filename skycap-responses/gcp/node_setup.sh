@@ -11,9 +11,10 @@
 #   software         build tools, uv, SkyRL at $SKYRL_BRANCH with skyrl-test inside it at $KIT_BRANCH, the
 #                    environments vLLM and skycap run in, and the kit's _tools.sh (Node, Codex, skycap-viewer).
 #   software-bg      start `software` detached (10-20 minutes on a fresh node); software-status reports.
-#   serve [--restart]  start vLLM and two skycap servers (:8080, and :8081 with --length-as-completed) from the
-#                    kit's 01_engine.sh / 02_skycap.sh, detached, wait until they answer, and start skycap-viewer
-#                    (:8765) on the records.
+#   serve [--restart]  start vLLM and four skycap servers from the kit's 01_engine.sh / 02_skycap.sh, detached:
+#                    token mode on :8080, and :8081 with --length-as-completed; text mode (forwarding to vLLM's
+#                    own /v1/responses) on :8090, and :8091 with --length-as-completed. Wait until they answer,
+#                    and start skycap-viewer (:8765) on the records.
 #   unserve          stop them.
 #   status           one screen: GPUs, disks, the servers, the records.
 set -euo pipefail
@@ -139,7 +140,7 @@ serve)
   source "$HOME/.skycap_env"
   [[ -f "$HOME/.skycap_software_ok" ]] || { echo "the software phase has not finished: run 02_setup_node.sh" >&2; exit 1; }
   if [[ "${2:-}" == "--restart" ]]; then
-    pkill -f 'skycap serve' || true; pkill -f 'vllm serve' || true; pkill -f 'skycap-viewer.js' || true; sleep 10
+    pkill -f 'skycap serve' || true; pkill -f 'vllm serve' || true; pkill -f 'skycap-viewer.js .*--port 8765' || true; sleep 10
   fi
   mkdir -p "$KIT/runs"
   cd "$HOME/SkyRL"
@@ -158,13 +159,14 @@ serve)
     done
     up "http://127.0.0.1:$engine_port/v1/models" || { echo "vLLM did not come up in 30 minutes" >&2; exit 1; }
   fi
-  for port in 8080 8081; do
+  for port in 8080 8081 8090 8091; do
     if up "http://127.0.0.1:$port/healthz"; then echo "skycap is already up on :$port"; continue; fi
-    length=0; [[ $port == 8081 ]] && length=1
-    SKYCAP_PORT=$port SKYCAP_LENGTH_AS_COMPLETED=$length \
+    length=0; [[ $port == 8081 || $port == 8091 ]] && length=1
+    mode=tokens; [[ $port == 809? ]] && mode=text
+    SKYCAP_PORT=$port SKYCAP_MODE=$mode SKYCAP_LENGTH_AS_COMPLETED=$length \
       nohup bash "$KIT/02_skycap.sh" > "$KIT/runs/skycap-$port.log" 2>&1 < /dev/null &
   done
-  for port in 8080 8081; do
+  for port in 8080 8081 8090 8091; do
     for _ in $(seq 1 60); do up "http://127.0.0.1:$port/healthz" && break; sleep 5; done
     if up "http://127.0.0.1:$port/healthz"; then
       echo "skycap :$port  $(curl -s "http://127.0.0.1:$port/healthz")"
@@ -182,7 +184,7 @@ serve)
   ;;
 
 unserve)
-  pkill -f 'skycap serve' || true; pkill -f 'vllm serve' || true; pkill -f 'skycap-viewer.js' || true
+  pkill -f 'skycap serve' || true; pkill -f 'vllm serve' || true; pkill -f 'skycap-viewer.js .*--port 8765' || true
   echo "stopped skycap, vLLM and skycap-viewer (records already written stay in $KIT/records)"
   ;;
 
@@ -191,7 +193,7 @@ status)
   echo "load    : $(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader 2>/dev/null | tr '\n' ';')"
   echo "cache   : $(df -h --output=used,avail /mnt/local_storage 2>/dev/null | tail -1)   boot: $(df -h --output=used,avail "$HOME" | tail -1)"
   echo "vllm    : $(up "http://127.0.0.1:${SKYCAP_ENGINE_PORT:-8000}/v1/models" && echo up || echo down)"
-  for port in 8080 8081; do
+  for port in 8080 8081 8090 8091; do
     echo "skycap  : :$port $(curl -s -m 5 "http://127.0.0.1:$port/healthz" || echo down)"
   done
   for dir in "$KIT"/records/*/; do

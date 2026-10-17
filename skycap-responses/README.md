@@ -1,10 +1,13 @@
 # skycap-responses
 
-This kit checks skycap's Responses API in **token mode** on one spot GPU VM on GCP:
+This kit checks skycap's Responses API on one spot GPU VM on GCP, in both modes:
 - vLLM serves the model;
-- two skycap servers sample through it and record:
+- two skycap servers in **token mode** sample through it and record:
   - `:8080` is plain;
   - `:8081` has `--length-as-completed`;
+- two in **text mode** forward each call to vLLM's own `/v1/responses` and record what it answered:
+  - `:8090` is plain;
+  - `:8091` has `--length-as-completed`;
 - a driver on your Mac runs Responses conversations through them, over an ssh tunnel, and checks each record;
 - real Codex runs on the VM;
 - skycap-viewer shows the records.
@@ -121,13 +124,16 @@ It starts these on the VM, detached:
 
 | Server | Port | Notes |
 |---|---|---|
-| vLLM | 8000 | `Qwen/Qwen3-8B`, `--max-model-len 32768`, `--enable-scale-out` |
-| skycap | 8080 | Plain, records to `records/port8080` |
-| skycap | 8081 | `--length-as-completed`, records to `records/port8081` |
+| vLLM | 8000 | `Qwen/Qwen3-8B`, `--max-model-len 32768`, `--enable-scale-out`, and Qwen3's reasoning and tool parsers (`SKYCAP_ENGINE_PARSERS`), which only its `/v1` routes use: text mode's upstream |
+| skycap, token mode | 8080 | Plain, records to `records/port8080` |
+| skycap, token mode | 8081 | `--length-as-completed`, records to `records/port8081` |
+| skycap, text mode | 8090 | Plain, forwards to vLLM's `/v1/responses`, records to `records/text-8090` |
+| skycap, text mode | 8091 | `--length-as-completed`, records to `records/text-8091` |
 | skycap-viewer | 8765 | Reads `records/` |
 
 - **The first start downloads the model,** which takes a few minutes. It prints a waiting line every minute.
-- **It ends with** one `skycap :8080 {...}` and one `skycap :8081 {...}` line, each showing that server's `/healthz`.
+- **It ends with** one `skycap :<port> {...}` line per skycap server, showing its `/healthz`.
+- **A VM set up before text mode** has vLLM without the parsers and no `:8090`/`:8091`. Pull the kit (step 2), then run `03_serve.sh --restart`.
 - **It skips anything already up,** so it is safe to run again.
 
 **A different model or context length:** pass `SKYCAP_MODEL`, `SKYCAP_MAX_MODEL_LEN` or `SKYCAP_ENGINE_ARGS`. Use `--restart` when servers are already running:
@@ -146,7 +152,7 @@ On an 8-GPU node, add for example `SKYCAP_ENGINE_ARGS="--tensor-parallel-size 4"
 bash skyrl-test/skycap-responses/gcp/tunnel.sh
 ```
 
-- **What it forwards:** `:8080`, `:8081` and `:8765` on your Mac go to the VM, plus `:8766` for [skycap-codex-eval](../skycap-codex-eval/README.md)'s viewer. It prints one line, then stays quiet until you press Ctrl-C.
+- **What it forwards:** the skycap servers (`:8080`, `:8081`, `:8090`, `:8091`) and the viewer (`:8765`) on your Mac go to the VM, plus `:8766` for [skycap-codex-eval](../skycap-codex-eval/README.md)'s viewer. It prints one line, then stays quiet until you press Ctrl-C.
 - **Run it again after** a preemption, a reboot, or a dropped connection.
 - **Check it from terminal A.** You should get JSON with `"mode": "tokens"`:
 
@@ -239,6 +245,38 @@ uv run --isolated --with openai --with httpx python skyrl-test/skycap-responses/
 ```bash
 uv run --isolated --with openai --with httpx python skyrl-test/skycap-responses/03_drive.py --list
 ```
+
+### Text mode
+
+The same drives, against the text-mode servers. skycap forwards each call to vLLM's own `/v1/responses` and records what it answered: messages only, no tokens. So nothing is bridged and the viewer has no token view. The runs are `text-8090` and `text-8091` in the viewer.
+
+The smoke config. Expect 12/12:
+
+```bash
+uv run --isolated --with openai --with httpx python skyrl-test/skycap-responses/03_drive.py --config configs/smoke.json --server http://127.0.0.1:8090
+```
+
+The cut-off on both text servers. Expect `incomplete` on `:8090` and `completed` on `:8091`, streamed or not; the record says `length` on both:
+
+```bash
+uv run --isolated --with openai --with httpx python skyrl-test/skycap-responses/03_drive.py --scenario cutoff --set server=http://127.0.0.1:8090,http://127.0.0.1:8091 --set stream=false,true
+```
+
+The matrix works the same way with `--server http://127.0.0.1:8090`.
+
+**How the scenarios change in text mode:**
+
+| Scenario | Token mode | Text mode |
+|---|---|---|
+| `overflow` | skycap refuses before sampling (`response.failed` / 400 `context_length_exceeded`); nothing recorded | vLLM refuses with its own 400, which skycap relays and records as a failure. The note shows vLLM's message |
+| `refusals` | skycap refuses `truncation: "auto"`; the other fields are ignored and answered | skycap still refuses what the dialect can't map. `truncation: "auto"` and the ignored fields go to vLLM, which decides; the note shows what it did |
+| `retry`, streamed | The retry gets the first reply back | The retry samples again (2 paths unless identical): skycap relays a text-mode stream as it arrives and keeps no copy to replay (`skycap/retry.py`) |
+| `resample` | 1 unbridged call | 0: text mode never bridges |
+| Any streamed run | One `output_item.done` per output item is checked | Not checked. vLLM closes an empty `message` item between reasoning and tool calls that its final response leaves out; the note says so. skycap records the final response's items |
+
+**What the first text-mode runs found (2026-10-17, vLLM 0.31.0, Qwen3-8B):**
+- smoke 12/12, with the token-mode smoke still 12/12 with the parsers on;
+- one skycap bug, now fixed on the SkyRL branch: vLLM ends a cut-off stream with a `response.completed` event whose response says `status: "incomplete"`. The API itself sends a `response.incomplete` event. `--length-as-completed` only rewrote the latter, so `:8091` streamed `incomplete` to the client. It now rewrites either; tests replay vLLM's shape. The fix reaches the VM when the branch is pushed and pulled (step 2), then `03_serve.sh --restart`.
 
 ---
 
@@ -350,7 +388,7 @@ bash skyrl-test/skycap-responses/gcp/status.sh
 
 **`gcloud` errors about reauthentication:** run `gcloud auth login`. The VM is not affected.
 
-**A server is down or misbehaving:** read its log on the VM. Swap `engine.log` for `skycap-8080.log`, `skycap-8081.log` or `viewer.log`:
+**A server is down or misbehaving:** read its log on the VM. Swap `engine.log` for `skycap-<port>.log` (8080, 8081, 8090, 8091) or `viewer.log`:
 
 ```bash
 bash skyrl-test/skycap-responses/gcp/ssh.sh --command 'tail -n 50 ~/SkyRL/skyrl-test/skycap-responses/runs/engine.log'
@@ -390,15 +428,15 @@ bash skyrl-test/skycap-responses/gcp/ssh.sh
 | `gcp/config.sh` | Settings: kinds and zones, image, disk, network, repos and branches, VM name. Each one can be overridden from the environment |
 | `gcp/01_create_vm.sh` | Step 1. Creates the spot VM, retrying until there is capacity, or restarts it after a preemption |
 | `gcp/02_setup_node.sh` | Step 2. Driver, local SSDs, checkouts, environments, Node, Codex, viewer |
-| `gcp/03_serve.sh` | Step 3. vLLM, skycap `:8080` and `:8081`, and the viewer, detached on the VM. Also takes `--restart` and `--stop` |
-| `gcp/tunnel.sh` | Step 4. Forwards `:8080`, `:8081`, `:8765` and `:8766` (skycap-codex-eval) to the Mac |
+| `gcp/03_serve.sh` | Step 3. vLLM, skycap `:8080` and `:8081` (token mode) and `:8090` and `:8091` (text mode), and the viewer, detached on the VM. Also takes `--restart` and `--stop` |
+| `gcp/tunnel.sh` | Step 4. Forwards `:8080`, `:8081`, `:8090`, `:8091`, `:8765` and `:8766` (skycap-codex-eval) to the Mac |
 | `gcp/alive.sh` | Whether the VM is up, from gcloud alone (no ssh). `--watch` reports each change |
 | `gcp/ssh.sh`, `gcp/status.sh` | A shell or a command on the VM; one screen of state |
 | `gcp/pull_records.sh`, `gcp/down.sh` | Step 9 |
 | `gcp/node_setup.sh`, `gcp/vm_startup.sh` | Run on the VM. The other scripts copy and call them |
 | `00_env.sh` | Sourced by the scripts below. Finds SkyRL and exports the knobs: `SKYCAP_MODEL` (default `Qwen/Qwen3-8B`), `SKYCAP_MAX_MODEL_LEN` (32768), the ports, `SKYCAP_RECORDS` |
-| `01_engine.sh` | Runs `vllm serve $SKYCAP_MODEL --enable-scale-out`, which serves `/inference/v1/generate`, the route skycap calls |
-| `02_skycap.sh` | Runs `skycap serve --mode tokens`, recording to `records/port<port>`. `SKYCAP_LENGTH_AS_COMPLETED=1` adds `--length-as-completed` |
+| `01_engine.sh` | Runs `vllm serve $SKYCAP_MODEL --enable-scale-out`, which serves `/inference/v1/generate`, the route token mode calls, with Qwen3's reasoning and tool parsers for text mode's upstream (`SKYCAP_ENGINE_PARSERS`; empty for none) |
+| `02_skycap.sh` | Runs `skycap serve --mode tokens`, recording to `records/port<port>`; with `SKYCAP_MODE=text`, `--mode text` forwarding to vLLM's `/v1`, recording to `records/text-<port>`. `SKYCAP_LENGTH_AS_COMPLETED=1` adds `--length-as-completed` |
 | `03_drive.py`, `scenarios.py`, `configs/` | The driver, its scenarios, and parameter grids (`smoke.json`, `matrix.json`) |
 | `04_codex.sh` | Real Codex (`codex exec`) through one trajectory |
 | `05_view.sh` | skycap-viewer on `records/`, or its `summary` |

@@ -53,6 +53,11 @@ class Session:
     failed_checks: list[str] = field(default_factory=list)
     replies: list[dict[str, Any]] = field(default_factory=list)
 
+    @property
+    def text_mode(self) -> bool:
+        """The server forwards to an upstream (vLLM's own /v1/responses) instead of sampling tokens itself."""
+        return self.capture.get("mode") == "text"
+
     def p(self, key: str, default: Any = None) -> Any:
         return self.params.get(key, default)
 
@@ -98,10 +103,14 @@ class Session:
                 if event.type in TERMINAL:
                     reply = event.response.model_dump(exclude_none=True)
             self.check(reply is not None, f"stream ended without a final event (saw {kinds[-3:]})")
-            self.check(
-                kinds.count("response.output_item.done") == len((reply or {}).get("output", [])),
-                "one output_item.done per item",
-            )
+            items, done = len((reply or {}).get("output", [])), kinds.count("response.output_item.done")
+            if not self.text_mode:
+                self.check(done == items, "one output_item.done per item")
+            elif done != items:
+                # Text mode relays the upstream's stream as sent. vLLM (0.31, Qwen3 parsers) closes an empty
+                # message item between reasoning and tool calls that its final response leaves out; skycap
+                # records the final response's items, which are what the client sends back.
+                self.note(f"the upstream's stream closed {done} items for {items} in its final response")
             reply = reply or {}
         self.replies.append(reply)
         kinds = {item.get("type") for item in reply.get("output", [])}
@@ -305,27 +314,46 @@ async def resample(session: Session) -> None:
     second = await session.respond(history)
     session.expect_paths = 1 if first.get("output") == second.get("output") else 2
     # skycap checks bridging on every call after a trajectory's first (`follows_a_call = bool(graph.nodes)`), and
-    # the second call has no model turn to extend, so it is rendered and recorded as unbridged.
-    session.expect_unbridged = 1
+    # the second call has no model turn to extend, so it is rendered and recorded as unbridged. Text mode never
+    # bridges (it records no tokens), so it records none.
+    session.expect_unbridged = 0 if session.text_mode else 1
 
 
 @scenario
 async def retry(session: Session) -> None:
-    """The same request twice, the second marked as an SDK retry: it gets the first reply back, no new sample."""
+    """The same request twice, the second marked as an SDK retry: it gets the first reply back, no new sample.
+
+    Except a streamed call in text mode: skycap relays the upstream's stream as it arrives and keeps no copy to
+    replay (skycap/retry.py), so the retry reaches the upstream and samples again, like a resample.
+    """
     history = [user("Write one sentence about the mountains.")]
     first = await session.respond(history)
     second = await session.respond(history, headers={"x-stainless-retry-count": "1"})
+    if session.text_mode and session.p("stream"):
+        session.note("text mode replays no streamed reply: the retry sampled again")
+        session.expect_paths = 1 if text_of(first) == text_of(second) else 2
+        return
     session.check(first.get("id") == second.get("id"), "the retry got a different response")
     session.check(text_of(first) == text_of(second), "the retry's text differs")
 
 
 @scenario
 async def overflow(session: Session) -> None:
-    """A prompt longer than the engine's context: streamed, a response.failed with context_length_exceeded;
-    not streamed, an HTTP 400. Nothing is recorded."""
+    """A prompt longer than the engine's context. Token mode: streamed, a response.failed with
+    context_length_exceeded; not streamed, an HTTP 400; nothing recorded. Text mode: the upstream's own refusal,
+    relayed as it sent it (its status and code are noted), and recorded as a failure."""
     session.expect_paths = 0
     session.expect_unbridged = None
     history = [user("word " * int(session.p("overflow_words", 60_000)))]
+    if session.text_mode:
+        try:
+            reply = await session.respond(history)
+        except openai.BadRequestError as error:
+            session.note(f"upstream refused: 400 {refusal(error)}")
+        else:
+            session.check(reply.get("status") == "failed", f"an overflowing prompt was answered ({reply.get('status')})")
+            session.note(f"upstream answered with a failed response: {reply.get('error')}")
+        return
     if session.p("stream"):
         reply = await session.respond(history)
         error = reply.get("error") or {}
@@ -343,7 +371,11 @@ async def overflow(session: Session) -> None:
 
 @scenario
 async def refusals(session: Session) -> None:
-    """What token mode refuses (HTTP 400) and what it ignores (answered), one request each."""
+    """What skycap refuses (HTTP 400) and what token mode ignores (answered), one request each.
+
+    Text mode refuses only what the dialect can't map; what token mode refuses for itself (`truncation: auto`) or
+    ignores goes to the upstream, which decides: its answer is noted, not checked.
+    """
     session.expect_paths = session.expect_unbridged = None
     refused = {
         "previous_response_id": {"previous_response_id": "resp_x"},
@@ -355,6 +387,17 @@ async def refusals(session: Session) -> None:
             "input": [user("q"), {"type": "reasoning", "summary": [], "encrypted_content": "gAAA"}, user("r")]
         },
     }
+    ignored = {
+        "tool_choice required": {"tool_choice": "required", "tools": tool_specs("add")},
+        "parallel_tool_calls false": {"parallel_tool_calls": False, "tools": tool_specs("add")},
+        "json schema": {"text": {"format": {"type": "json_schema", "name": "x", "schema": {"type": "object"}}}},
+        "reasoning effort none": {"reasoning": {"effort": "none"}},
+        "logprobs": {"include": ["message.output_text.logprobs"], "top_logprobs": 2},
+    }
+    forwarded: dict[str, dict[str, Any]] = {}
+    if session.text_mode:
+        forwarded = {"truncation auto": refused.pop("truncation auto"), **ignored}
+        ignored = {}
     for what, fields in refused.items():
         history = fields.pop("input", [user("hi")])
         try:
@@ -363,13 +406,12 @@ async def refusals(session: Session) -> None:
             session.note(f"{what}: 400 {refusal(error)}")
             continue
         session.check(False, f"{what} was answered, not refused")
-    ignored = {
-        "tool_choice required": {"tool_choice": "required", "tools": tool_specs("add")},
-        "parallel_tool_calls false": {"parallel_tool_calls": False, "tools": tool_specs("add")},
-        "json schema": {"text": {"format": {"type": "json_schema", "name": "x", "schema": {"type": "object"}}}},
-        "reasoning effort none": {"reasoning": {"effort": "none"}},
-        "logprobs": {"include": ["message.output_text.logprobs"], "top_logprobs": 2},
-    }
+    for what, fields in forwarded.items():
+        try:
+            reply = await session.respond([user("Say hi.")], **fields)
+            session.note(f"{what}: forwarded; the upstream answered ({reply.get('status')})")
+        except openai.BadRequestError as error:
+            session.note(f"{what}: forwarded; the upstream refused: 400 {refusal(error)}")
     for what, fields in ignored.items():
         reply = await session.respond([user("Say hi.")], **fields)
         session.check(reply.get("status") == "completed", f"{what}: status {reply.get('status')}")

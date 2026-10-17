@@ -77,6 +77,14 @@ Follow it. Ctrl-C stops only the `tail`, not the run:
 bash skyrl-test/skycap-responses/gcp/ssh.sh --command 'tail -f ~/SkyRL/skyrl-test/skycap-codex-eval/runs/cc16x4.log'
 ```
 
+Or, from the Mac, check where it stands. With `--wait`, it keeps checking every 60 s and returns when the run ends, with a Mac notification:
+
+```bash
+bash skyrl-test/skycap-codex-eval/status.sh cc16x4 --wait
+```
+
+Without `--wait`, it prints one line: running, finished or STOPPED EARLY, then rollouts done and accepted, and the log's last line. The exit code is 0 (finished), 1 (stopped early) or 2 (running).
+
 **How long:** smoke rollouts took 15–60 s each. Expect harder problems to take minutes each, so roughly 30–60 minutes for 64 rollouts. That's an estimate, not measured. A rollout that runs past `--timeout` (900 s) is stopped and recorded with `stop_reason: agent_timeout`.
 
 **The first run:** downloads CodeContests' test split once (63 MB, into `.cache/`). It then checks every candidate problem against the dataset's own Python solutions, which takes about 30 s.
@@ -216,6 +224,7 @@ The reward is 1 only if every test passes. The trace analysis doesn't depend on 
 | `02_analyze.sh`, `02_analyze.py` | VM or Mac | The graph analysis, plus skycap-viewer's `check` and `summary` |
 | `03_screenshots.py` | Mac | Viewer screenshots, with Playwright |
 | `04_view.sh` | VM | The eval viewer on `:8766` |
+| `status.sh` | Mac | Whether a run is still going, and its progress; `--wait` returns when it ends |
 | `pull.sh` | Mac | Copies a run's records and outputs from the VM |
 
 **What each rollout records:**

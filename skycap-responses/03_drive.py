@@ -87,7 +87,8 @@ async def run_one(http: httpx.AsyncClient, name: str, params: dict[str, Any], de
     server = str(params.get("server") or default_server).rstrip("/")
     capture = (await http.get(f"{server}/healthz")).json().get("capture", {})
     # The served model: this shell's SKYCAP_MODEL, else the tokenizer the server renders with (token mode's
-    # model name), e.g. when driving a remote server from a laptop through a tunnel.
+    # model name), e.g. when driving a remote server from a laptop through a tunnel. Text mode names none; the
+    # upstream's model list (through the trajectory) does, below.
     params = {"model": os.environ.get("SKYCAP_MODEL") or capture.get("tokenizer"), **params}
     created = (await http.post(f"{server}/trajectories", json={"meta": {"scenario": name, "params": params}})).json()
     llm = openai.AsyncOpenAI(
@@ -96,6 +97,8 @@ async def run_one(http: httpx.AsyncClient, name: str, params: dict[str, Any], de
         max_retries=0,
         timeout=float(params.get("timeout", 1800)),
     )
+    if not params["model"]:
+        params["model"] = (await llm.models.list()).data[0].id
     session = Session(llm=llm, params=params, created=created, http=http, server=server, capture=capture)
     started, error = time.time(), None
     try:
@@ -191,8 +194,6 @@ async def main() -> int:
     async with httpx.AsyncClient(timeout=60) as http:
         health = (await http.get(f"{args.server.rstrip('/')}/healthz")).json()
         print(f"server capture: {json.dumps(health.get('capture'))}")
-        if health.get("capture", {}).get("mode") != "tokens":
-            print("note: this server is not in token mode")
 
         async def guarded(name: str, params: dict[str, Any]) -> None:
             async with gate:
