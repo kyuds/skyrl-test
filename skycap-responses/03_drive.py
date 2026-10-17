@@ -110,6 +110,9 @@ async def run_one(http: httpx.AsyncClient, name: str, params: dict[str, Any], de
         "ok": error is None and not session.failed_checks,
         **{key: v if isinstance(v, str | int | float | bool) else json.dumps(v) for key, v in params.items()},
     }
+    # The scenario's notes (e.g. each refusal's 400 message), so the viewer shows what left no node behind.
+    if session.notes:
+        annotations["notes"] = " | ".join(session.notes)
     finished = (await http.post(f"{server}/trajectories/{created['id']}/finish", json={"annotations": annotations})).json()
     document = (await http.get(f"{server}/trajectories/{created['id']}")).json()
     calls = sorted((call for node in document.get("nodes", []) for call in node["calls"]), key=lambda c: c["t_start"])

@@ -104,6 +104,13 @@ class Session:
             )
             reply = reply or {}
         self.replies.append(reply)
+        kinds = {item.get("type") for item in reply.get("output", [])}
+        if "reasoning" in kinds and not kinds & {"message", "function_call"}:
+            # The model ended its turn inside <think> (no </think>, or a cut-off there): the whole turn parses as
+            # reasoning. renderers declines to bridge from such a turn, so the next call re-renders the history
+            # (which Qwen3's template spells differently) and forks. Model behaviour, the same through chat.
+            self.note(f"call {len(self.replies)} ended inside <think> with no answer; the next call can't bridge")
+            self.expect_paths = self.expect_unbridged = None
         return reply
 
     def replay(self, reply: dict[str, Any]) -> list[dict[str, Any]]:
@@ -127,6 +134,13 @@ SCENARIOS: dict[str, Scenario] = {}
 def scenario(run: Scenario) -> Scenario:
     SCENARIOS[run.__name__] = run
     return run
+
+
+def refusal(error: openai.BadRequestError) -> str:
+    """A 400's code and message, as skycap sent them."""
+    body = error.body if isinstance(error.body, dict) else {}
+    code = body.get("code") or error.code
+    return f"{f'[{code}] ' if code else ''}{body.get('message') or error.message}"
 
 
 def user(text: str) -> dict[str, Any]:
@@ -290,6 +304,9 @@ async def resample(session: Session) -> None:
     first = await session.respond(history)
     second = await session.respond(history)
     session.expect_paths = 1 if first.get("output") == second.get("output") else 2
+    # skycap checks bridging on every call after a trajectory's first (`follows_a_call = bool(graph.nodes)`), and
+    # the second call has no model turn to extend, so it is rendered and recorded as unbridged.
+    session.expect_unbridged = 1
 
 
 @scenario
@@ -318,6 +335,7 @@ async def overflow(session: Session) -> None:
     try:
         await session.respond(history)
     except openai.BadRequestError as error:
+        session.note(f"400 {refusal(error)}")
         session.check(error.code == "context_length_exceeded", f"code {error.code}")
     else:
         session.check(False, "an overflowing prompt was answered")
@@ -341,7 +359,8 @@ async def refusals(session: Session) -> None:
         history = fields.pop("input", [user("hi")])
         try:
             await session.respond(history, **fields)
-        except openai.BadRequestError:
+        except openai.BadRequestError as error:
+            session.note(f"{what}: 400 {refusal(error)}")
             continue
         session.check(False, f"{what} was answered, not refused")
     ignored = {

@@ -75,6 +75,18 @@ GCP_KINDS="h100x1 h100 b200" caffeinate -i bash skyrl-test/skycap-responses/gcp/
   - running: the script says so and exits;
   - stopped or preempted: it restarts the VM in its own zone.
 
+**Is it up?** This asks gcloud only, without ssh, so it answers within a second or two even while the VM boots. It prints, for example, `kyuds-skycap-h100x1  RUNNING  a3-highgpu-1g SPOT  us-central1-c  up since 2026-10-16 22:03`:
+
+```bash
+bash skyrl-test/skycap-responses/gcp/alive.sh
+```
+
+To keep watching, use `--watch`. It prints a line, and shows a Mac notification, each time the state changes (`STAGING` → `RUNNING`, a preemption, ...). It checks every 30 s, or every N s with `--watch N`. Leave it in a spare terminal, and press Ctrl-C to stop:
+
+```bash
+bash skyrl-test/skycap-responses/gcp/alive.sh --watch
+```
+
 ---
 
 ## Step 2: set up the node (terminal A, 10–20 minutes)
@@ -157,6 +169,8 @@ uv run --isolated --with openai --with httpx python skyrl-test/skycap-responses/
   - `CHECK` followed by what differed.
 - **At the end:** `N/12 as expected`. Results are saved to `skyrl-test/skycap-responses/runs/<time>.jsonl`.
 - **The exit code is nonzero** if any trajectory needs a look.
+
+A run whose model ended a turn inside `<think>` gets the note "ended inside <think> with no answer", and its path and unbridged checks are turned off. Qwen3 sometimes writes its whole answer in its thinking and stops without `</think>`. `renderers` won't bridge from such a turn, so the next call is re-rendered and forks. This is model behaviour, the same through chat completions.
 
 Every record is checked for:
 - one path per conversation;
@@ -264,6 +278,12 @@ bash skyrl-test/skycap-responses/gcp/ssh.sh --command 'cd ~/SkyRL && SKYCAP_URL=
 
 Codex's own log and events go to the VM's `runs/codex-<time>/`, and step 9 copies them to your Mac.
 
+To print a finished run's summary again, from the Mac through the tunnel:
+
+```bash
+SKYCAP_URL=http://127.0.0.1:8081 bash skyrl-test/skycap-responses/04_codex.sh --summary <trajectory id>
+```
+
 Some things are known only after a real run, which is the design's "capture spike" (codex-harness.md section 5):
 
 | Question | Where to look |
@@ -314,13 +334,15 @@ SKYCAP_RECORDS=$PWD/skyrl-test/skycap-responses/records/<vm> bash skyrl-test/sky
 
 ## When something goes wrong
 
-**Where things stand:** whether the VM exists (spot VMs get preempted), then GPUs, disks, vLLM, both skycap servers, the records and the newest drive:
+**Is the VM alive?** `gcp/alive.sh` gives one line from gcloud. For a stopped VM, it also says whether the stop was a preemption. Add `--watch` to be told when the state changes (see step 1).
+
+**Where things stand on the VM:** GPUs, disks, vLLM, both skycap servers, the records and the newest drive. This one connects over ssh:
 
 ```bash
 bash skyrl-test/skycap-responses/gcp/status.sh
 ```
 
-**Preempted** (`status.sh` says `TERMINATED`, or the tunnel drops):
+**Preempted** (`alive.sh` says `PREEMPTED`, or the tunnel drops):
 - The boot disk survives; the weights and caches do not.
 - Run steps 1, 2 and 3 again, then reopen the tunnel (step 4).
   - Step 2 rebuilds the RAID and the environments, because the uv cache lived on the local SSDs.
@@ -370,6 +392,7 @@ bash skyrl-test/skycap-responses/gcp/ssh.sh
 | `gcp/02_setup_node.sh` | Step 2. Driver, local SSDs, checkouts, environments, Node, Codex, viewer |
 | `gcp/03_serve.sh` | Step 3. vLLM, skycap `:8080` and `:8081`, and the viewer, detached on the VM. Also takes `--restart` and `--stop` |
 | `gcp/tunnel.sh` | Step 4. Forwards `:8080`, `:8081` and `:8765` to the Mac |
+| `gcp/alive.sh` | Whether the VM is up, from gcloud alone (no ssh). `--watch` reports each change |
 | `gcp/ssh.sh`, `gcp/status.sh` | A shell or a command on the VM; one screen of state |
 | `gcp/pull_records.sh`, `gcp/down.sh` | Step 9 |
 | `gcp/node_setup.sh`, `gcp/vm_startup.sh` | Run on the VM. The other scripts copy and call them |
@@ -418,7 +441,7 @@ To add a scenario:
 | `tools` | A tool loop (`get_time`, `add`) plus a follow-up: one path, all bridged |
 | `codex_like` | Codex's request shape: `instructions`, two `developer` messages, an environment message, and `exec_command` / `read_file` over several steps. Qwen3's template has no `developer` role, so this exercises the developer fold |
 | `cutoff` | `max_output_tokens` cuts the first answer, and the conversation goes on. The status follows the server's option (`incomplete`, or `completed` on `:8081`); the record says `length` either way. Paths aren't checked, because a turn cut inside its thinking may not bridge ([#2462](https://github.com/NovaSky-AI/SkyRL/pull/2462)) |
-| `resample` | The same request twice, with no retry marker: two samples, so two paths unless they came out identical |
+| `resample` | The same request twice, with no retry marker: two samples, so two paths unless they came out identical. The second call counts as one unbridged call: skycap checks every call after a trajectory's first, and this one has no model turn to extend |
 | `retry` | The same request, the second marked `x-stainless-retry-count: 1`: the same response comes back, and one call is recorded |
 | `overflow` | A prompt past the context window. Streamed: `response.failed` / `context_length_exceeded`. Not streamed: HTTP 400. Nothing is recorded |
 | `refusals` | 400s for `previous_response_id`, `custom` and `web_search` tools, `truncation: auto`, `item_reference` and encrypted reasoning. Answers despite `tool_choice: required`, `parallel_tool_calls: false`, a JSON schema, `reasoning.effort: none` and logprobs |
