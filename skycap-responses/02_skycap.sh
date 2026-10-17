@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# A skycap server in token mode in front of the vLLM engine from 01_engine.sh. Long-running: start it with
+# nohup (README). It records every trajectory to $SKYCAP_RECORDS/<name>, where <name> is SKYCAP_NAME
+# (default: port<SKYCAP_PORT>), which is the run skycap-viewer lists it under.
+#
+#   SKYCAP_PORT=8080                         where it listens
+#   SKYCAP_LENGTH_AS_COMPLETED=1             report a length cut-off to Responses clients as `completed`
+#   SKYCAP_NAME=...                          the record directory's name
+# Extra arguments go to `skycap serve`, e.g. --require-api-key or --sampling-overrides '{"top_k": 20}'.
+set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/00_env.sh"
+name="${SKYCAP_NAME:-port$SKYCAP_PORT}"
+args=(
+  serve --mode tokens
+  --upstream-url "$SKYCAP_ENGINE_URL"
+  --tokenizer "$SKYCAP_MODEL"
+  --max-model-len "$SKYCAP_MAX_MODEL_LEN"
+  --host 127.0.0.1 --port "$SKYCAP_PORT"
+  --record-dir "$SKYCAP_RECORDS/$name"
+)
+if [[ "${SKYCAP_LENGTH_AS_COMPLETED:-0}" == 1 ]]; then
+  args+=(--length-as-completed)
+fi
+echo "skycap on :$SKYCAP_PORT -> $SKYCAP_ENGINE_URL, records in $SKYCAP_RECORDS/$name"
+cd "$SKYRL_DIR/skycap"
+exec uv run --isolated --extra tokens skycap "${args[@]}" "$@"
