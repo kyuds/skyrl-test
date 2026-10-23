@@ -235,6 +235,7 @@ The reward is 1 only if every test passes. The trace analysis doesn't depend on 
 
 ## Known limits
 
+- **A cut-off ends the rollout as an error.** A reply that reaches the context window goes back `incomplete`, as the Responses API says. Codex takes that as an error, and with retries off it fails the turn and exits 1, so the rollout is recorded with `stop_reason: error` (the viewer masks it). The grader still runs on what Codex wrote, and skycap records the call as `finish_reason: length`. In `cc16x4` (run before 2026-10-22, when skycap still reported cut-offs as `completed`), 3 of 64 rollouts had a cut-off.
 - **`apply_patch`:** Codex 0.154.0 has no metadata for `Qwen/Qwen3-8B`, so it falls back to defaults. That leaves out `apply_patch`, while the system prompt still describes it. The model calls it anyway and Codex answers `unsupported call`. The report counts these under "Tool calls Codex answered with an error".
 - **Codex's settings:** the same as `skycap-responses/04_codex.sh`:
   - retries off;

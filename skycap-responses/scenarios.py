@@ -286,20 +286,17 @@ async def codex_like(session: Session) -> None:
 async def cutoff(session: Session) -> None:
     """A first answer cut off by max_output_tokens, then the conversation goes on.
 
-    The status follows the server's --length-as-completed; the record says `length` either way. Path and bridge
-    checks are off: a turn cut off inside its thinking may not bridge (SkyRL #2462).
+    The reply is `incomplete` with reason `max_output_tokens`, as the API says, and the record says `length`. Path
+    and bridge checks are off: a turn cut off inside its thinking may not bridge (SkyRL #2462).
     """
     session.expect_paths = session.expect_unbridged = None
-    as_completed = bool(session.capture.get("length_as_completed"))
     history = [user("Explain in detail how a hash map works.")]
     reply = await session.respond(history, max_output_tokens=int(session.p("cutoff_tokens", 24)))
-    want = "completed" if as_completed else "incomplete"
-    session.check(reply.get("status") == want, f"cut-off status {reply.get('status')}, expected {want}")
-    if not as_completed:
-        session.check(
-            (reply.get("incomplete_details") or {}).get("reason") == "max_output_tokens",
-            f"incomplete_details {reply.get('incomplete_details')}",
-        )
+    session.check(reply.get("status") == "incomplete", f"cut-off status {reply.get('status')}, expected incomplete")
+    session.check(
+        (reply.get("incomplete_details") or {}).get("reason") == "max_output_tokens",
+        f"incomplete_details {reply.get('incomplete_details')}",
+    )
     history += session.replay(reply)
     history.append(user("Go on, briefly."))
     await session.respond(history)

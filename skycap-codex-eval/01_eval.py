@@ -1,6 +1,6 @@
 """Codex over a task set through skycap, in eval mode: record every rollout, grade it, train nothing.
 
-Starts a skycap server in token mode (``--length-as-completed``) in front of the running vLLM engine, recording to
+Starts a skycap server in token mode in front of the running vLLM engine, recording to
 ``records/<run>/``. Then, ``--concurrency`` at a time, for every task and repeat:
 
 1. creates a trajectory, with ``task_id`` / ``instance_id`` / ``step`` in its meta, so skycap-viewer groups the
@@ -76,7 +76,6 @@ def start_skycap(run: str, port: int, log: Path) -> subprocess.Popen:
     env = {
         **os.environ,
         "SKYCAP_PORT": str(port),
-        "SKYCAP_LENGTH_AS_COMPLETED": "1",
         "SKYCAP_RECORDS": os.environ["EVAL_RECORDS"],
         "SKYCAP_NAME": run,
     }

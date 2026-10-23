@@ -1,7 +1,7 @@
 # Sourced by this kit's scripts. Builds on skycap-responses (its 00_env.sh finds SkyRL, uv, Node, Codex and the
 # viewer, and sets SKYCAP_MODEL, SKYCAP_MAX_MODEL_LEN and the engine URL), and adds this kit's own knobs.
 # The eval runs its own skycap server (EVAL_PORT) and viewer (EVAL_VIEWER_PORT), so its records stay apart from
-# skycap-responses' :8080/:8081 ones.
+# skycap-responses' :8080 and :8090 ones.
 [[ -n "${BASH_VERSION:-}" ]] || { echo "source this file from bash"; return 1 2>/dev/null || exit 1; }
 EVAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$EVAL_DIR/../skycap-responses/00_env.sh" || { return 1 2>/dev/null || exit 1; }

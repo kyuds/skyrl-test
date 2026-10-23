@@ -16,8 +16,8 @@ export SKYCAP_MAX_MODEL_LEN="${SKYCAP_MAX_MODEL_LEN:-32768}"
 # vLLM, on this node.
 export SKYCAP_ENGINE_PORT="${SKYCAP_ENGINE_PORT:-8000}"
 export SKYCAP_ENGINE_URL="${SKYCAP_ENGINE_URL:-http://127.0.0.1:$SKYCAP_ENGINE_PORT}"
-# The skycap server the driver talks to. 02_skycap.sh takes SKYCAP_PORT per server, so two servers
-# (e.g. with and without --length-as-completed) can run side by side.
+# The skycap server the driver talks to. 02_skycap.sh takes SKYCAP_PORT per server, so several servers
+# (e.g. token mode and text mode) can run side by side.
 export SKYCAP_PORT="${SKYCAP_PORT:-8080}"
 export SKYCAP_URL="${SKYCAP_URL:-http://127.0.0.1:$SKYCAP_PORT}"
 # Every server writes records under here, one directory per server: what skycap-viewer reads.

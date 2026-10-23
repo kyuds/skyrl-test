@@ -9,7 +9,8 @@
 # Codex settings, as the design's binding has them (plan/skycap-dialects/codex-harness.md section 4):
 # retries off (Codex sends no retry marker, so a retry would fork), a long stream idle timeout (skycap sends
 # nothing until the turn is sampled), the context window set to the engine's, function tools only.
-# Use a server started with SKYCAP_LENGTH_AS_COMPLETED=1: Codex resamples a cut-off reported as incomplete.
+# A cut-off goes back `incomplete`, as the API says: Codex takes that as an error and, with retries off, fails the
+# turn (exit 1). The record keeps it as `finish_reason: length`.
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/00_env.sh"
 

@@ -21,7 +21,7 @@ A config is JSON:
 
 ``--set key=v1,v2`` adds (or replaces) a grid axis on every run; values parse as JSON, else as strings.
 ``--server`` picks the skycap server; a ``server`` parameter in a grid runs the same scenarios on several
-(e.g. one with --length-as-completed and one without).
+(e.g. a token-mode one and a text-mode one).
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run on your Mac, after 02_setup_node.sh and again after every preemption or reboot. Starts, on the VM and
-# detached: vLLM (the kit's 01_engine.sh, with the parsers text mode needs) and four skycap servers
-# (02_skycap.sh): token mode on :8080 plain and :8081 with --length-as-completed, text mode on :8090 and :8091
-# likewise. Then waits until they answer. Skips what is already up.
+# detached: vLLM (the kit's 01_engine.sh, with the parsers text mode needs) and two skycap servers
+# (02_skycap.sh): token mode on :8080 and text mode on :8090. Then waits until they answer. Skips what is
+# already up.
 #   bash skyrl-test/skycap-responses/gcp/03_serve.sh
 #   bash skyrl-test/skycap-responses/gcp/03_serve.sh --restart       # stop all three first
 #   bash skyrl-test/skycap-responses/gcp/03_serve.sh --stop          # stop them and leave them stopped
