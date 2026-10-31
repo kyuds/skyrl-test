@@ -1,8 +1,10 @@
 # OPD full experiments
 
-For now this kit only does one thing: find out how much GPU compute we can get on GCP. That decides which
-experiment plan to run (`plan/opd-blog/experiment-sequence.md`, in the workspace). Node setup and the run scripts
-come later.
+Two parts so far:
+
+- **This page, `gcp/`:** get GPU nodes on GCP. That decided which experiment plan to run
+  (`plan/opd-blog/experiment-sequence.md`, in the workspace).
+- **[`teacher/`](teacher/README.md):** train the math teachers on those nodes, one model per node.
 
 ## What it asks for
 
