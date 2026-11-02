@@ -27,6 +27,12 @@ software_running() {
   pid="$(cat "$HOME/.opd_software.pid" 2>/dev/null || true)"
   [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'software'
 }
+# `ray stop` kills GCS last and can exit before it gets there: on 2026-11-02 it left a lone gcs_server on both B200s.
+ray_down() {
+  "$HOME/venvs/skyrl/bin/ray" stop --force >/dev/null 2>&1 || true
+  pkill -9 -x raylet || true
+  pkill -9 -x gcs_server || true
+}
 
 case "$phase" in
 driver)
@@ -146,11 +152,14 @@ ray)
   RAY="$HOME/venvs/skyrl/bin/ray"
   [[ -x "$RAY" ]] || { echo "no $RAY: the software phase has not run" >&2; exit 1; }
   mountpoint -q /mnt/local_storage || { echo "/mnt/local_storage is not mounted: the storage phase has not run" >&2; exit 1; }
-  if "$RAY" status >/dev/null 2>&1; then
+  # The raylet too: GCS alone answers `ray status`, and a run then finds no node to join.
+  if pgrep -x raylet >/dev/null && "$RAY" status >/dev/null 2>&1; then
     echo "Ray is already up"
   else
+    ray_down
     "$RAY" start --head --disable-usage-stats < /dev/null
     sleep 5
+    pgrep -x raylet >/dev/null || { echo "Ray did not come up: no raylet" >&2; exit 1; }
   fi
   "$RAY" status 2>/dev/null | sed -n '/Resources/,$p' | sed -n '1,12p'
   echo "open-file limit: $(ulimit -n)   NCCL_NET=$NCCL_NET NCCL_NET_PLUGIN=$NCCL_NET_PLUGIN"
@@ -163,7 +172,8 @@ train)
   # The log is appended to, so it keeps the history across a preemption.
   log="$STORE/logs/$run.log"
   setsid nohup bash "$KIT/02_train_teacher.sh" "$model" $mode >> "$log" 2>&1 < /dev/null &
-  sleep "${TEACHER_START_WAIT:-20}"
+  # ray.init takes a minute to give up, so a run that cannot join Ray dies about 85 seconds in.
+  sleep "${TEACHER_START_WAIT:-120}"
   if ! pgrep -f '02_train_teacher\.sh' >/dev/null && [[ ! -f "$STORE/logs/$run.done" && ! -f "$STORE/logs/$run.smoke_ok" ]]; then
     echo "the run died right after it started:" >&2
     tail -n 20 "$log" | cut -c1-200 >&2
@@ -177,15 +187,16 @@ stop-run)
   pkill -f 'dapo\.main_dapo' || true
   # Ray and the vLLM engines would outlive the driver for a while, and the next run needs their GPUs. The ray phase
   # starts Ray again.
-  "$HOME/venvs/skyrl/bin/ray" stop --force >/dev/null 2>&1 || true
+  ray_down
   for _ in $(seq 1 "${TEACHER_STOP_TRIES:-30}"); do
-    if ! pgrep -f '02_train_teacher\.sh' >/dev/null && [[ -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null)" ]]; then
+    if ! pgrep -f '02_train_teacher\.sh' >/dev/null && ! pgrep -x 'raylet|gcs_server' >/dev/null &&
+      [[ -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null)" ]]; then
       echo "stopped"
       exit 0
     fi
     sleep 2
   done
-  echo "the run or its GPU processes are still there:" >&2
+  echo "the run, Ray or its GPU processes are still there:" >&2
   nvidia-smi --query-compute-apps=pid,name --format=csv,noheader >&2 || true
   exit 1
   ;;

@@ -41,8 +41,7 @@ instead of 2 add little to that. Compare it with the first steps' `ETA` in `stat
 - **W&B:** project `opd_full_experiments`, named as in the table and tagged `teacher`, `dapo`,
   `dapo-math-17k` and the base model. Smoke tests go to `opd_full_experiments_smoke`.
 - **Hugging Face:** `kyuds/opd_full_experiments/<run>_step1000`, public. A Hub repo id cannot have a second slash, so
-  this is one repo, `kyuds/opd_full_experiments`, with one folder per model. Do not use the two
-  `dapo_nemotron_math_*_step1000` folders in it: they are the failed first launch.
+  this is one repo, `kyuds/opd_full_experiments`, with one folder per model.
 
 vLLM loads a repo or a local path, not a folder inside a repo, so download a model before using it as a teacher. From
 `~/SkyRL` on a VM:
@@ -68,7 +67,11 @@ length from 2,149 to 4,063 tokens and 1.7B-Base's from 2,377 to 3,167. This is *
 changed in the same step, so the new recipe cannot separate them.
 
 All six runs restarted, so the teachers differ only in the model. The four that were healthy stopped at about step
-230 to 370. Their checkpoints and exports stay on disk under the old names.
+350 to 540. `--restart` leaves their checkpoints and exports on disk under the old names.
+
+On that restart both B200 runs died in `ray.init`, about 85 seconds in. `ray stop --force` had left `gcs_server` alive
+with no raylet, `ray status` still answered, so the `ray` phase called it up, and `launch_all.sh` said `running` after
+waiting only 20 seconds. `stop-run` and the `ray` phase now check both daemons, and `train` waits 120 seconds.
 
 ## Restart on this recipe
 
@@ -223,7 +226,8 @@ the old names a finished run would be skipped and an active one left alone.
 `launch_all.sh --only h100-1,b200-2` limits it to those nodes, with `--smoke`, `--restart` or neither.
 
 Disk: an 8B export is 31 GB and a checkpoint 92 GB, with three on disk while one saves. A run needs about 525 GB on a
-B200 and the first launch's files stay, which leaves about 90 GB free. Watch `DISK_FREE` in `status.sh`.
+B200. With the first launch's files on disk, 368 GB each, a B200 had 554 GB free on 2026-11-02, which leaves about
+30 GB, so delete those files before a run gets far. Watch `DISK_FREE` in `status.sh`.
 
 The VMs check out one pinned SkyRL commit, `SKYRL_COMMIT`, the head of `kyuds/opd-entrypoint` on 2026-10-31, so a
 resume uses the same code as the start even if the branch moves. Pushing to the kit branch does reach a node when it
@@ -240,12 +244,21 @@ Verified on 2026-11-01:
   restart check or the stop check on purpose each made them fail.
 - All six nodes hold the same 17,391 DAPO-Math-17k rows, and the plan with `--restart` reaches them through real `gcloud`.
 - `stop-run`'s patterns match exactly the three run processes on each active node, and the GPU check reads 16 processes
-  on an active node and 0 on an idle one. No real run has been stopped with it.
+  on an active node and 0 on an idle one.
 - The real Base template: the plain prompt ends in `<|im_start|>assistant\n`, with no think block.
 - On the first launch, on real nodes: node setup, training, W&B logging and `hf upload` to the real Hub. The 8B settings
   held for about 250 steps without running out of memory.
 - Between `b4b10f48`, the branch head when `73ca8v4j` ran, and the pinned commit: the penalty's arithmetic, GRPO, the
   dual-clip loss and the AIME environment match. The inference-server changes were not audited.
+
+Verified on 2026-11-02:
+
+- `stop-run` stopped four real runs. On both B200s it left the lone `gcs_server` described under
+  [First launch](#first-launch-2026-11-01). A second `ray stop --force` killed it at once.
+- The `ray` and `stop-run` phases against fake daemons: 14 scenarios, 6 of which fail on the script they replace.
+- The fixed phases on b200-2, from that broken state: Ray restarted, a real driver joined with 8 GPUs, `stop-run`
+  cleared both daemons, and a repeat of the `ray` phase left a healthy cluster alone.
+- The H100 runs on this recipe, at steps 2 and 3: reward -0.73 to -0.98, 660 to 1,620 tokens.
 
 Verified on 2026-10-31: 8 GPUs with driver 580 and working CUDA on an H100 and a B200, `nvidia-fabricmanager` failing
 harmlessly with the GPU fabric reporting Success, the expected NVMe drives, 1,000 GB boot disks, and the 8B models sharing
@@ -254,7 +267,9 @@ the student's vocabulary and special-token IDs.
 Not verified:
 
 - **The cause:** the think block is the main suspect, but data and update rate changed with it.
-- **This recipe on a real node:** nothing has trained on it yet. Check the first hours as in
+- **Why `ray stop` missed GCS:** it kills GCS last and its output was discarded. Its unguarded `kill()` of slow exiters
+  may have raised on the B200s, but that is a guess. The fix does not depend on it.
+- **This recipe past the first steps:** a collapse would not show yet. Check the first hours as in
   [Restart on this recipe](#restart-on-this-recipe).
 - **Gradient noise:** each optimizer step sees 128 rollouts, against 512 in the earlier runs and on the first launch.
 - **Memory late in a run:** answers get longer as training goes on. If a run dies of memory, lower
