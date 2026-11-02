@@ -32,13 +32,13 @@ export OPD_STORE="${OPD_STORE:-$HOME/opd-store}"
 export LOGS="$OPD_STORE/logs"
 export CKPT_ROOT="$OPD_STORE/ckpts"
 export EXPORT_ROOT="$OPD_STORE/exports"
-# Not TRAIN_FILE or DATA_DIR: prepare_dapo_data.sh reads those from the environment, and would download DAPO-Math-17k
-# over the Nemotron file.
-export NEMOTRON_FILE="$OPD_STORE/data/nemotron/nemotron-cascade-rl-math.parquet"
-export EVAL_DIR="$OPD_STORE/data/dapo"
-export EVAL_2024="$EVAL_DIR/aime-2024-cleaned.parquet"
-export EVAL_2025="$EVAL_DIR/aime-2025-cleaned.parquet"
-mkdir -p "$LOGS" "$CKPT_ROOT" "$EXPORT_ROOT" "$(dirname "$NEMOTRON_FILE")" "$EVAL_DIR"
+# Not TRAIN_FILE or DATA_DIR: prepare_dapo_data.sh reads those from the environment, and would download the raw
+# dataset over the cleaned file.
+export DAPO_DIR="$OPD_STORE/data/dapo"
+export DAPO_TRAIN="$DAPO_DIR/dapo-math-17k-cleaned.parquet"
+export EVAL_2024="$DAPO_DIR/aime-2024-cleaned.parquet"
+export EVAL_2025="$DAPO_DIR/aime-2025-cleaned.parquet"
+mkdir -p "$LOGS" "$CKPT_ROOT" "$EXPORT_ROOT" "$DAPO_DIR"
 
 echo "skyrl : $SKYRL_DIR @ $(git -C "$SKYRL_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')   kit: $(git -C "$TEACHER_KIT" rev-parse --short HEAD 2>/dev/null || echo '?')"
 echo "gpus  : $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | sort | uniq -c | sed 's/^ *//' | tr '\n' ' ')"

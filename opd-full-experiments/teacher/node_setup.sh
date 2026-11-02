@@ -14,12 +14,13 @@
 #   ray              start the single-node Ray cluster from the base environment, if it is not up.
 #   train <model> <run> [--smoke]
 #                    start 02_train_teacher.sh under nohup, unless a run is already active.
+#   stop-run         stop the active run and Ray, and wait for the GPUs to free up. Its checkpoints and exports stay.
 #   report <run>     one key=value per line, read by launch_all.sh and status.sh.
 set -euo pipefail
 APT="sudo DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 -y"
 STORE="$HOME/opd-store"
 KIT="$HOME/SkyRL/skyrl-test/opd-full-experiments/teacher"
-phase="${1:?phase: driver | storage | software | software-bg | software-status | ray | train | report}"
+phase="${1:?phase: driver | storage | software | software-bg | software-status | ray | train | stop-run | report}"
 # The pid file survives a preemption and a new boot can reuse the number, so check that it is still this script.
 software_running() {
   local pid
@@ -169,6 +170,24 @@ train)
     exit 1
   fi
   echo "started; log: $log"
+  ;;
+
+stop-run)
+  pkill -f '02_train_teacher\.sh' || true
+  pkill -f 'dapo\.main_dapo' || true
+  # Ray and the vLLM engines would outlive the driver for a while, and the next run needs their GPUs. The ray phase
+  # starts Ray again.
+  "$HOME/venvs/skyrl/bin/ray" stop --force >/dev/null 2>&1 || true
+  for _ in $(seq 1 "${TEACHER_STOP_TRIES:-30}"); do
+    if ! pgrep -f '02_train_teacher\.sh' >/dev/null && [[ -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null)" ]]; then
+      echo "stopped"
+      exit 0
+    fi
+    sleep 2
+  done
+  echo "the run or its GPU processes are still there:" >&2
+  nvidia-smi --query-compute-apps=pid,name --format=csv,noheader >&2 || true
+  exit 1
   ;;
 
 report)

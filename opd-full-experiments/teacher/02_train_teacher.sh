@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs on the VM, on all 8 GPUs. Trains one base model on Nemotron-Cascade-RL-Math, evaluates on AIME 2024 and 2025,
+# Runs on the VM, on all 8 GPUs. Trains one base model on DAPO-Math-17k, evaluates on AIME 2024 and 2025,
 # and uploads the final export to the Hub. launch_all.sh starts it on every node. By hand:
 #   nohup bash skyrl-test/opd-full-experiments/teacher/02_train_teacher.sh Qwen/Qwen3-8B >> ~/opd-store/logs/<run>.log 2>&1 < /dev/null &
 #   bash skyrl-test/opd-full-experiments/teacher/02_train_teacher.sh Qwen/Qwen3-8B --smoke    # 2 tiny steps, no upload
@@ -7,12 +7,15 @@
 #
 # The recipe is opd-gcp-spot-full-repro/02_run_dapo.sh, which is examples/train/algorithms/dapo/run_dapo_*_aime.sh flag
 # for flag: GRPO advantages, dual-clip loss with clip-higher (0.2 / 0.28), overlong filtering plus the soft overlong
-# punishment, no KL loss, LR 1e-6. What differs, all set in config.sh or below:
-#   - Data: Nemotron-Cascade-RL-Math instead of DAPO-Math-17k, and AIME 2025 added to the eval.
-#   - Batch: 128 prompts x 8 rollouts instead of 512 x 16, 2 optimizer steps per training step instead of 16.
-#   - Thinking off, on both Base and instruct models: the chat template opens every answer with an empty think block.
-#     That needs generator.batched=false, because the batched path drops chat_template_kwargs.
-#   - Eval every 25 steps, checkpoints every 10, HF exports every 100.
+# punishment, no KL loss, LR 1e-6 with 160 warmup optimizer steps, DAPO-Math-17k. What differs, all set in config.sh
+# or below:
+#   - Batch: 128 prompts x 8 rollouts instead of 512 x 16, 8 optimizer steps per training step instead of 16.
+#   - Thinking off on instruct models: the chat template opens every answer with an empty think block. That needs
+#     generator.batched=false, because the batched path refuses chat_template_kwargs. All six runs use that path.
+#   - Base models keep the earlier runs' plain prompt. On 2026-11-01 the think block sent the 1.7B and 4B Base runs to
+#     bare guesses within 30 steps: see the README.
+#   - AIME 2025 added to the eval. Eval every 25 steps, checkpoints every 10, an HF export at each epoch end and the
+#     last step.
 #
 # Preempted or interrupted? launch_all.sh starts this again: the run name is fixed and resume_mode=latest picks up the
 # last checkpoint. A finished run is not trained again; only a missing upload is retried.
@@ -42,6 +45,8 @@ if [[ "${1:-}" == "--smoke" ]]; then
 else
   rm -rf "$CKPT_ROOT"/smoke_* "$EXPORT_ROOT"/smoke_*   # a smoke test that failed leaves these behind
 fi
+PROMPT_OPTS=()
+[[ "$MODEL_ID" == *-Base ]] || PROMPT_OPTS=(generator.chat_template_kwargs="{enable_thinking: false}")
 
 upload() {
   if bash "$TEACHER_KIT/upload_export.sh" --run "$RUN"; then return 0; fi
@@ -63,7 +68,7 @@ echo "=== run=$RUN  project=$PROJECT  model=$MODEL_ID  steps=$STEPS  gpus=$NUM_G
 # nothing in training needs it. Only the upload does.
 cd "$SKYRL_DIR"   # uv resolves the project (and its extras) from the cwd
 env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp -m examples.train.algorithms.dapo.main_dapo \
-  data.train_data="['$NEMOTRON_FILE']" \
+  data.train_data="['$DAPO_TRAIN']" \
   data.val_data="['$EVAL_2024','$EVAL_2025']" \
   environment.env_class=aime \
   trainer.policy.model.path="$MODEL_ID" \
@@ -75,7 +80,6 @@ env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp -m exam
   generator.eval_sampling_params.temperature=1.0 \
   generator.eval_sampling_params.top_p=0.7 \
   generator.batched=false \
-  generator.chat_template_kwargs="{enable_thinking: false}" \
   generator.n_samples_per_prompt="$TEACHER_SAMPLES" \
   generator.eval_n_samples_per_prompt=32 \
   trainer.train_batch_size="$TEACHER_PROMPTS" \
@@ -125,6 +129,7 @@ env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp -m exam
   trainer.ckpt_path="$CKPT_ROOT/$RUN" \
   trainer.export_path="$EXPORT_ROOT/$RUN" \
   trainer.log_path="$LOGS/skyrl/$RUN" \
+  ${PROMPT_OPTS[@]+"${PROMPT_OPTS[@]}"} \
   ${EXTRA[@]+"${EXTRA[@]}"} \
   "$@"
 

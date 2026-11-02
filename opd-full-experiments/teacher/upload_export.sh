@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs on the VM. Uploads a run's HF export (safetensors + config + tokenizer) to its own folder in the Hub repo. The
 # run script calls this after a run finishes; by hand it uploads any other step or retries a failed upload.
-#   bash skyrl-test/opd-full-experiments/teacher/upload_export.sh --run dapo_nemotron_math_qwen3_8b_base
+#   bash skyrl-test/opd-full-experiments/teacher/upload_export.sh --run dapo_dapo17k_qwen3_8b_base
 #   bash skyrl-test/opd-full-experiments/teacher/upload_export.sh --run <run> --step 500
 #   bash skyrl-test/opd-full-experiments/teacher/upload_export.sh --run <run> --dry-run    # show what would go where
 #

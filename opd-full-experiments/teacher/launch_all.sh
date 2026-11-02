@@ -6,9 +6,12 @@
 #   nohup caffeinate -i bash skyrl-test/opd-full-experiments/teacher/launch_all.sh --smoke --yes > ~/opd_teachers.log 2>&1 < /dev/null &
 #   nohup caffeinate -i bash skyrl-test/opd-full-experiments/teacher/launch_all.sh --yes > ~/opd_teachers.log 2>&1 < /dev/null &
 #   ... --only h100-1,b200-2                                                         # just these nodes
+#   ... --restart                                                                    # replace runs from an older recipe
 #
 # Safe to run again at any time, and that is how a preemption is handled: a run that is active or finished is left
 # alone, and anything else picks up from its last checkpoint. --smoke runs 2 tiny steps on each node and waits for them.
+# --restart is for a new recipe with new run names in config.sh: it stops an active run that is not under its node's
+# current name, and leaves that run's checkpoints and exports on disk. A current run is still left alone.
 set -euo pipefail
 TEACHER_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$TEACHER_DIR/config.sh"
@@ -21,16 +24,18 @@ REBOOT_WAIT="${TEACHER_REBOOT_WAIT:-45}"     # before the first ssh after a rebo
 SOFTWARE_TRIES="${TEACHER_SOFTWARE_TRIES:-135}"   # 45 minutes at POLL
 SMOKE_TRIES="${TEACHER_SMOKE_TRIES:-135}"         # 45 minutes at POLL
 
-GO=0; SMOKE=""; ONLY=""
+GO=0; SMOKE=""; ONLY=""; RESTART=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --yes) GO=1; shift ;;
     --smoke) SMOKE="--smoke"; shift ;;
     --only) ONLY="${2:-}"; shift 2 ;;
+    --restart) RESTART=1; shift ;;
     -h|--help) sed -n '2,/^set -euo pipefail/p' "$0" | sed '$d'; exit 0 ;;
     *) echo "unknown argument: $1 (--help lists them)" >&2; exit 2 ;;
   esac
 done
+[[ -z "$SMOKE" || -z "$RESTART" ]] || { echo "--restart starts real runs, so it does not go with --smoke" >&2; exit 2; }
 
 # The runs to bring up, as "<node> <model>" lines.
 selected() {
@@ -46,6 +51,7 @@ rows="$(nodes_rows)" || exit 1
 
 echo "project $TEACHER_PROJECT on W&B, kit $KIT_BRANCH, SkyRL ${SKYRL_COMMIT:0:8}"
 if [[ -n "$SMOKE" ]]; then echo "smoke test: 2 tiny steps on each node, nothing uploaded"; else echo "$TEACHER_STEPS steps each, then uploaded to $TEACHER_HF_REPO"; fi
+if [[ -n "$RESTART" ]]; then echo "restart: an active run under any other name is stopped. Its checkpoints and exports stay on disk"; fi
 while read -r node model; do
   printf '  %-7s %-11s %-24s %s\n' "$node" "$(awk -v n="$GCP_NODE_PREFIX-$node" '$1 == n {print $4}' <<<"$rows")" "$model" "$(run_name "$model")"
 done <<<"$RUNS"
@@ -169,6 +175,12 @@ bring_up() {
     { finish "$node" "FAILED: could not copy node_setup.sh"; return 1; }
 
   rep="$(node_phase report "$run" 2>/dev/null || true)"
+  # Active, with no log under this name: the run is from an older recipe.
+  if [[ -n "$RESTART" && "$(field active "$rep")" == 1 && "$(field ever_started "$rep")" == 0 ]]; then
+    echo "--- stopping the run from the older recipe"
+    node_phase stop-run || { finish "$node" "FAILED: could not stop the old run. Log: $STATE/logs/$node.log"; return 1; }
+    rep="$(node_phase report "$run" 2>/dev/null || true)"
+  fi
   if [[ "$(field active "$rep")" == 1 ]]; then
     if [[ -n "$SMOKE" ]]; then finish "$node" "FAILED: a run is active, so no smoke test here"; return 1; fi
     finish "$node" "already running, step $(field step "$rep")"; return 0
