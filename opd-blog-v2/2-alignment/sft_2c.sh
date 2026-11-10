@@ -25,6 +25,7 @@ if [[ $V2_DRY_RUN != 1 ]]; then ROWS="$(python3 -c 'import json,sys; print(json.
 #            "10% training steps are used for learning rate warmup"
 #   [script] https://github.com/Mosi-AI/M2RL/blob/c94ce97ce7f2e0f2800e6dd8c20667f00ca223d4/M2RL/slime/scripts/multi_teacher_opd.sh#L121-L127
 SFT_BASE="$M2RL_SFT"               # already a chat model: its export ends turns at <|im_end|>
+SFT_ROWS="$ROWS"
 SFT_DATA="$DATA"                   # traces.sh: Qwen3-32B's answers, one per prompt, cut at SFT_MAX_LEN
 SFT_LR=5e-5                        # [mtoff]
 SFT_BATCH=512                      # [mtoff]

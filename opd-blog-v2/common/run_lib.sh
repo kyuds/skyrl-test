@@ -275,8 +275,8 @@ v2_upload_dir() {
 # that before uploading. The last export is linked as $MODELS/$RUN and uploaded to the Hub folder $RUN. A preempted
 # run resumes from its last checkpoint; a finished one is not trained again.
 # The run script sets every one of V2_SFT_VARS in its HYPERPARAMETERS block; nothing has a default here.
-V2_SFT_VARS="SFT_BASE SFT_DATA SFT_LR SFT_SCHEDULER SFT_WARMUP SFT_BETAS SFT_WEIGHT_DECAY SFT_GRAD_CLIP SFT_BATCH
-  SFT_MICRO SFT_MAX_LEN SFT_EPOCHS SFT_CKPT_EVERY SFT_HF_EVERY SFT_TAGS"
+V2_SFT_VARS="SFT_BASE SFT_DATA SFT_ROWS SFT_LR SFT_SCHEDULER SFT_WARMUP SFT_BETAS SFT_WEIGHT_DECAY SFT_GRAD_CLIP
+  SFT_BATCH SFT_MICRO SFT_MAX_LEN SFT_EPOCHS SFT_CKPT_EVERY SFT_HF_EVERY SFT_TAGS"
 v2_sft() {
   local out="$MODELS/$RUN" export_dir v
   for v in $V2_SFT_VARS; do
@@ -316,6 +316,12 @@ v2_sft() {
   if [[ $SMOKE == 1 ]]; then
     # The real micro-batch on real rows, so a smoke run also checks the memory of a full-length micro-batch.
     OVERRIDES+=(max_training_steps=2 batch_size=16 hf_save_interval=2 ckpt_interval=0 'resume_from=""')
+  else
+    # SkyRL at the pinned commit gives the LR scheduler no total when the length is set in epochs
+    # (skyrl/train/sft_trainer.py, init: num_training_steps=None), and a linear schedule then fails at startup. The
+    # same total as max_training_steps fixes it without changing the run: SkyRL counts ceil(rows / batch) steps an
+    # epoch, so this is exactly SFT_EPOCHS epochs, and the schedule reaches 0 at the last step.
+    OVERRIDES+=("max_training_steps=$(( SFT_EPOCHS * ((SFT_ROWS + SFT_BATCH - 1) / SFT_BATCH) ))")
   fi
   OVERRIDES+=(${EXTRA[@]+"${EXTRA[@]}"})
   if [[ $V2_DRY_RUN == 1 ]]; then

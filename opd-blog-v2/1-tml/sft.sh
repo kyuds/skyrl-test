@@ -51,4 +51,6 @@ if [[ $V2_DRY_RUN != 1 ]]; then
     bash "$V2_KIT/data/prepare.sh" sft-ot3 "$SFT_DATA" "$OT3_DOMAINS" "$OT3_ROWS"
   fi
 fi
+SFT_ROWS="$OT3_ROWS"   # the dry run's guess; on a node, the rows prepare_sft.py kept
+if [[ $V2_DRY_RUN != 1 ]]; then SFT_ROWS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["rows"])' "$SFT_DATA.stats.json")"; fi
 v2_sft
