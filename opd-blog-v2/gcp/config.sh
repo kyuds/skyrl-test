@@ -111,6 +111,41 @@ resolve_node() {
   fi
   read -r GCP_VM GCP_ZONE GCP_VM_TYPE GCP_VM_STATUS <<<"$row"
 }
+# ---- what a refusal means (01_create_nodes.sh, migrate.sh) ----
+# Order matters: an API rate limit says "Quota exceeded" too, and must not read as a quota refusal for GPUs.
+AUTH_ERRORS='reauth|auth login|invalid_grant'
+RATE_ERRORS='rate.?limit|quota metric|quota group|per minute|per 100 seconds'
+CAPACITY_ERRORS='RESOURCE_POOL_EXHAUSTED|not have enough resources|currently unavailable|stockout|try again later'
+QUOTA_ERRORS='QUOTA_EXCEEDED|quota .*exceeded'
+TRANSIENT_ERRORS='database is locked|internal error|backendError|HTTPError 50[0-9]|Error 50[0-9]|connection (reset|aborted|refused)|timed out|temporary failure|server not found|ServerNotFound|remote end closed'
+classify() {
+  if grep -qiE "$AUTH_ERRORS" <<<"$1"; then echo auth
+  elif grep -qiE "$RATE_ERRORS" <<<"$1"; then echo transient
+  elif grep -qiE "$CAPACITY_ERRORS" <<<"$1"; then echo capacity
+  elif grep -qiE "$QUOTA_ERRORS" <<<"$1"; then echo quota
+  elif grep -qiE "$TRANSIENT_ERRORS" <<<"$1"; then echo transient
+  else echo other
+  fi
+}
+
+# Creates one spot node: SPOT, and --instance-termination-action=STOP so a preemption keeps the boot disk. Its boot
+# disk comes from the image, or, for migrate.sh, from a snapshot of the node's old disk, with that disk's type and size.
+create_vm() {   # $1 = kind, $2 = zone, $3 = node, [$4 = snapshot, $5 = boot disk type, $6 = boot disk GB]
+  local dtype="${5:-$(kind_disk "$1")}" size="${6:-$GCP_BOOT_DISK_GB}" disk=() source=()
+  if [[ -n "$dtype" ]]; then disk=(--boot-disk-type "$dtype"); fi
+  if [[ -n "${4:-}" ]]; then source=(--source-snapshot "$4")
+  else source=(--image-project "$GCP_IMAGE_PROJECT" --image-family "$GCP_IMAGE_FAMILY"); fi
+  gcloud compute instances create "$3" \
+    --project "$GCP_PROJECT" --zone "$2" \
+    --machine-type "$(kind_machine "$1")" \
+    --provisioning-model=SPOT --instance-termination-action=STOP --maintenance-policy=TERMINATE \
+    --scopes=cloud-platform \
+    "${source[@]}" \
+    --boot-disk-size "${size}GB" ${disk[@]+"${disk[@]}"} \
+    --tags "$GCP_TAGS" \
+    --network-interface "nic-type=GVNIC,network=$GCP_NETWORK,subnet=$GCP_SUBNET" \
+    --metadata-from-file "startup-script=$GCP_DIR/vm_startup.sh"
+}
 # True while 01_create_nodes.sh is running.
 acquire_running() {
   local pid

@@ -121,6 +121,27 @@ The NVMe array is wiped, so the HF cache goes with it, and Ray is down.
    interrupted one resumes from its last checkpoint (every 10 OPD steps, every 250 SFT steps; an eval keeps the GPUs
    that finished), and the models download again.
 
+**When its zone has no capacity** (step 2 fails with STOCKOUT), move the node instead. `migrate.sh` snapshots the
+stopped node's boot disk, deletes the VM and the disk once the snapshot is READY, and creates the node again under the
+same name in any zone with room, its boot disk made from the snapshot, so every checkpoint, export, job record and
+log comes along. It checks the files arrived, then deletes the snapshot. Interrupted, it resumes where it was when run
+again. It refuses while `01_create_nodes.sh` runs (that would bring the old node back) and refuses a running node.
+The snapshot costs a little for the time it exists; a disk made from it in another region is billed as network
+egress, roughly $0.01 to $0.08 per GB. The plan first:
+
+```bash
+bash skyrl-test/opd-blog-v2/gcp/migrate.sh h100-3
+```
+
+Then (it asks for capacity for up to 4 hours; `touch ~/opd-blog-v2-gcp/stop` ends it early, keeping the snapshot):
+
+```bash
+nohup caffeinate -i bash skyrl-test/opd-blog-v2/gcp/migrate.sh h100-3 --yes > ~/opd_v2_migrate.log 2>&1 < /dev/null &
+```
+
+Then steps 2 and 3 above, `02_setup_nodes.sh --only <node> --yes` and the same stage again. Tested on 2026-11-10
+against a stand-in gcloud (the normal path, every interruption point, no capacity anywhere); not yet on a real node.
+
 ## Stop paying
 
 Stops every running node. Boot disks are kept, with every export on them, and you pay for the disks only:

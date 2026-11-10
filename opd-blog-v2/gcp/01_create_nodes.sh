@@ -68,23 +68,6 @@ if [[ $YES == 0 ]]; then
   exit 0
 fi
 
-# ---- what a refusal means ----
-# Order matters: an API rate limit says "Quota exceeded" too, and must not read as a quota refusal for GPUs.
-AUTH_ERRORS='reauth|auth login|invalid_grant'
-RATE_ERRORS='rate.?limit|quota metric|quota group|per minute|per 100 seconds'
-CAPACITY_ERRORS='RESOURCE_POOL_EXHAUSTED|not have enough resources|currently unavailable|stockout|try again later'
-QUOTA_ERRORS='QUOTA_EXCEEDED|quota .*exceeded'
-TRANSIENT_ERRORS='database is locked|internal error|backendError|HTTPError 50[0-9]|Error 50[0-9]|connection (reset|aborted|refused)|timed out|temporary failure|server not found|ServerNotFound|remote end closed'
-classify() {
-  if grep -qiE "$AUTH_ERRORS" <<<"$1"; then echo auth
-  elif grep -qiE "$RATE_ERRORS" <<<"$1"; then echo transient
-  elif grep -qiE "$CAPACITY_ERRORS" <<<"$1"; then echo capacity
-  elif grep -qiE "$QUOTA_ERRORS" <<<"$1"; then echo quota
-  elif grep -qiE "$TRANSIENT_ERRORS" <<<"$1"; then echo transient
-  else echo other
-  fi
-}
-
 # ---- one worker per node ----
 # attempts.tsv: epoch, node, kind, zone, result, detail. The report at the end is read from it.
 record()  { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$1" "$2" "$3" "$4" "$(tr '\t\n' '  ' <<<"${5:-}" | cut -c1-220)" >> "$STATE/attempts.tsv"; }
@@ -109,20 +92,7 @@ warn_gcloud() {
   if [[ "$(classify "$2")" == auth ]]; then log "$1: gcloud's login has expired. Run  gcloud auth login  and this script carries on."
   else log "$1: gcloud failed, still trying: $(head -2 <<<"$2" | tr '\n' ' ' | cut -c1-200)"; fi
 }
-create_in() {   # $1 = kind, $2 = zone, $3 = node. --instance-termination-action=STOP keeps the boot disk on preemption.
-  local disk=()
-  if [[ -n "$(kind_disk "$1")" ]]; then disk=(--boot-disk-type "$(kind_disk "$1")"); fi
-  gcloud compute instances create "$3" \
-    --project "$GCP_PROJECT" --zone "$2" \
-    --machine-type "$(kind_machine "$1")" \
-    --provisioning-model=SPOT --instance-termination-action=STOP --maintenance-policy=TERMINATE \
-    --scopes=cloud-platform \
-    --image-project "$GCP_IMAGE_PROJECT" --image-family "$GCP_IMAGE_FAMILY" \
-    --boot-disk-size "${GCP_BOOT_DISK_GB}GB" ${disk[@]+"${disk[@]}"} \
-    --tags "$GCP_TAGS" \
-    --network-interface "nic-type=GVNIC,network=$GCP_NETWORK,subnet=$GCP_SUBNET" \
-    --metadata-from-file "startup-script=$GCP_DIR/vm_startup.sh"
-}
+create_in() { create_vm "$1" "$2" "$3"; }   # $1 = kind, $2 = zone, $3 = node (config.sh)
 # The kind's zones, starting somewhere different for each of its nodes.
 rotated_zones() {
   local zones n off

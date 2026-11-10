@@ -26,7 +26,11 @@ for job in "$@"; do
     progress="$(sed -n 's/.*| *\([0-9][0-9]*\/[0-9][0-9]*\) *\[[^<]*<\([^,]*\),.*/step \1, eta \2/p' <<<"$bar")"
   elif grep -aq 'Starting SFT training for' "$log" 2>/dev/null; then
     total="$(grep -a -o 'Starting SFT training for [0-9]* steps' "$log" | tail -n 1 | grep -o '[0-9][0-9]*')"
-    progress="checkpoint $(cat "$STORE/ckpts/$job/latest_ckpt_global_step.txt" 2>/dev/null || echo 0)/$total"
+    # SkyRL logs "Step N: loss=..., grad_norm=..." every few steps; checkpoints come every SFT_CKPT_EVERY steps.
+    step="$(grep -a -o 'Step [0-9]*: loss=[0-9.]*' "$log" | tail -n 1)"
+    progress="step ${step:-0/}"
+    if [[ -n "$step" ]]; then progress="step ${step%%:*}/$total, ${step#*: }"; progress="${progress/step Step /step }"; fi
+    progress="$progress, checkpoint $(cat "$STORE/ckpts/$job/latest_ckpt_global_step.txt" 2>/dev/null || echo 0)"
   elif [[ -d "$STORE/evals/$job" ]]; then
     d="$STORE/evals/$job"
     if [[ -f "$d/scores.json" ]]; then
