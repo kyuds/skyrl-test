@@ -29,7 +29,12 @@ TP="$(v2_tp_32b)"                  # 2 GPUs per engine on an H100, 1 on a B200
 # =====================================================================================
 
 OUT="$SFT_2C"
-if [[ $SMOKE == 1 ]]; then N_PROMPTS=16; MAX_TOKENS=512; OUT="${SFT_2C}_smoke"; fi
+KEEP_ALL=0
+if [[ $SMOKE == 1 ]]; then
+  # 512 tokens is too short for any thinking answer to finish, so the smoke test keeps every prompt's first answer,
+  # right or wrong, finished or not: it checks the plumbing through tokenizing, not the filter.
+  N_PROMPTS=16; MAX_TOKENS=512; OUT="${SFT_2C}_smoke"; KEEP_ALL=1
+fi
 DIR="$EVALS/$RUN"
 if [[ $V2_DRY_RUN == 1 ]]; then
   echo "traces $RUN: $MODEL (tp $TP) on $N_PROMPTS prompts of $PROMPT_FILE x $SAMPLES, temperature $TEMPERATURE, top-p $TOP_P, top-k $TOP_K, $MAX_TOKENS tokens -> $OUT"
@@ -45,21 +50,23 @@ cd "$SKYRL_DIR"
   python "$V2_KIT/0-evals/generate.py" --model "$MODEL" --requests "$DIR/requests.jsonl" --tp "$TP" \
   --out "$DIR/responses.jsonl" --temperature "$TEMPERATURE" --top-p "$TOP_P" --top-k "$TOP_K" --max-tokens "$MAX_TOKENS"
 uv run --isolated --extra fsdp --with math-verify==0.9.0 python "$V2_KIT/0-evals/grade.py" --dir "$DIR" --tools "$TOOLS"
-uv run --isolated --extra fsdp python - "$DIR" <<'PY'
+uv run --isolated --extra fsdp python - "$DIR" "$KEEP_ALL" <<'PY'
 import json, os, sys
-d = sys.argv[1]
+d, keep_all = sys.argv[1], sys.argv[2] == "1"
 requests = {r["id"]: r for r in map(json.loads, open(os.path.join(d, "requests.jsonl")))}
 responses = {(r["id"], r["sample"]): r for r in map(json.loads, open(os.path.join(d, "responses.jsonl")))}
 kept = {}
 for g in sorted(map(json.loads, open(os.path.join(d, "graded.jsonl"))), key=lambda g: (g["id"], g["sample"])):
-    if g["correct"] and g["finish_reason"] == "stop" and g["id"] not in kept:
+    if (keep_all or (g["correct"] and g["finish_reason"] == "stop")) and g["id"] not in kept:
         kept[g["id"]] = responses[(g["id"], g["sample"])]["response"]
 with open(os.path.join(d, "traces.jsonl"), "w") as f:
     for rid, response in kept.items():
         question = requests[rid]["messages"][-1]["content"]
         f.write(json.dumps({"question": question, "response": response}) + "\n")
-print(f"kept {len(kept)} of {len(requests)} prompts: one correct, finished answer each")
+print(f"kept {len(kept)} of {len(requests)} prompts: one {'answer' if keep_all else 'correct, finished answer'} each")
+if not kept:
+    sys.exit("no answer was kept: nothing to train the warm-up on (check graded.jsonl and the cut rate)")
 PY
 uv run --isolated --extra fsdp python "$V2_KIT/data/prepare_sft.py" traces --traces "$DIR/traces.jsonl" \
-  --tokenizer "$M2RL_SFT" --max-length 18432 --out "$OUT"
+  --tokenizer "$M2RL_SFT" --max-length 18432 --out "$OUT" $([[ $KEEP_ALL == 1 ]] && echo --keep-unfinished)
 echo "=== $RUN done: $OUT ($(tr -d '\n ' < "$OUT.stats.json" | cut -c1-160))"

@@ -120,6 +120,7 @@ def main() -> None:
     parser.add_argument("--max-shards", type=int, default=OT3[2], help="ot3: read only the first N shards (testing)")
     parser.add_argument("--traces", help="traces: the jsonl 2-alignment/traces.sh wrote")
     parser.add_argument("--finished-only", action="store_true", help="drop answers that never close their think block")
+    parser.add_argument("--keep-unfinished", action="store_true", help="traces: keep unfinished answers too (smoke tests only)")
     parser.add_argument("--domains", default="", help="ot3: comma-separated domains to keep (math, code, science); empty keeps all, as the cookbook")
     parser.add_argument("--num-proc", type=int, default=max(1, min(32, (os.cpu_count() or 2) - 2)))
     args = parser.parse_args()
@@ -133,7 +134,8 @@ def main() -> None:
         ds = load_traces(args.traces)
     domains = Counter(ds["domain"]) if "domain" in ds.column_names else None
 
-    encode = make_encoder(args.tokenizer, args.max_length, args.finished_only or args.source == "traces")
+    encode = make_encoder(args.tokenizer, args.max_length,
+                          args.finished_only or (args.source == "traces" and not args.keep_unfinished))
     ds = ds.map(lambda r: encode(r["question"], r["answer"]), remove_columns=ds.column_names, num_proc=args.num_proc)
     status = Counter(ds["status"])
     tokens = sum(ds["n_tokens"])
