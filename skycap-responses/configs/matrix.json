@@ -1,0 +1,11 @@
+{
+  "defaults": {"max_output_tokens": 4096},
+  "repeats": 2,
+  "runs": [
+    {"scenario": "tools", "grid": {"stream": [false, true], "replay": ["verbatim", "strip"], "temperature": [0.6, 1.0]}},
+    {"scenario": "codex_like", "grid": {"stream": [true], "replay": ["verbatim", "strip"], "temperature": [0.6, 1.0]}},
+    {"scenario": "chat", "grid": {"stream": [false, true], "temperature": [1.0]}},
+    {"scenario": "resample", "params": {"temperature": 1.0}},
+    {"scenario": "tools", "params": {"replay": "drop_reasoning", "stream": true}, "repeats": 1}
+  ]
+}

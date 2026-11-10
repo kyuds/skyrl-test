@@ -1,0 +1,12 @@
+{
+  "defaults": {"temperature": 0.7, "max_output_tokens": 4096},
+  "runs": [
+    {"scenario": "chat", "grid": {"stream": [false, true]}},
+    {"scenario": "tools", "grid": {"stream": [false, true]}},
+    {"scenario": "codex_like", "params": {"stream": true}},
+    {"scenario": "cutoff", "grid": {"stream": [false, true]}},
+    {"scenario": "retry", "grid": {"stream": [false, true]}},
+    {"scenario": "overflow", "grid": {"stream": [false, true]}},
+    {"scenario": "refusals"}
+  ]
+}
