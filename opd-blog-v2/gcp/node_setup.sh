@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON the VM. gcp/02_setup_nodes.sh and status.sh on your Mac copy it to ~/opd_node_setup.sh and call one phase at
+# Runs ON the VM. gcp/02_setup_nodes.sh on your Mac copies it to ~/opd_node_setup.sh and calls one phase at
 # a time; every phase can be run again safely (after a reboot, a preemption, or a dropped connection). Adapted from
 # opd-full-experiments/teacher/node_setup.sh, with its fix for a half-stopped Ray cluster.
 #   driver           Makes sure the NVIDIA driver is 580 or newer: SkyRL's torch is a CUDA 13 build, which a 570
@@ -15,7 +15,7 @@
 #   stop-run <script>
 #                    stop that run and Ray, and wait for the GPUs to free up. Its checkpoints and exports stay.
 #   report <run> <script>
-#                    one key=value per line, read by status.sh. <script> is the run's script under opd-blog-v2/.
+#                    one key=value per line about one run (orchestrate.sh uses common/job_report.sh instead).
 set -euo pipefail
 APT="sudo DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 -y"
 STORE="$HOME/opd-store"
@@ -165,7 +165,7 @@ ray)
   ;;
 
 stop-run)
-  script="${2:?stop-run needs the run's script, e.g. phase1-opd/run_m2rl.sh}"
+  script="${2:?stop-run needs the run script, e.g. 2-alignment/opd.sh}"
   pattern="opd-blog-v2/${script//./\\.}"
   pkill -f "$pattern" || true
   pkill -f 'opd-blog-v2/common/kit_main\.py' || true
@@ -186,7 +186,7 @@ stop-run)
   ;;
 
 report)
-  run="${2:?report needs the run name}"; script="${3:?report needs the run's script}"
+  run="${2:?report needs the run name}"; script="${3:?report needs the run script}"
   log="$STORE/logs/$run.log"
   echo "active=$(pgrep -f "opd-blog-v2/${script//./\\.}" >/dev/null && echo 1 || echo 0)"
   echo "ever_started=$([[ -f "$log" ]] && echo 1 || echo 0)"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run on your Mac, before pushing a change to a run script or moving SKYRL_COMMIT. Builds every run's config, normal and
-# --smoke, with SkyRL's own parser and validators (as the run would), and checks the GPU budget and lengths, which
-# SkyRL only finds out on the node. Prints what each run will do. Needs the SkyRL checkout at the pinned commit.
+# Run on your Mac, before pushing a change to a run script or moving SKYRL_COMMIT. Builds every job's config, normal and
+# --smoke, with SkyRL's own parser and validators (as the job would): the OPD runs' and the SFT runs'. It checks the GPU
+# budget and lengths, which SkyRL only finds out on the node, and prints what each job will do (evals included).
+# Needs the SkyRL checkout at the pinned commit.
 #   bash skyrl-test/opd-blog-v2/common/check_configs.sh
 #   SKYRL_DIR=/path/to/SkyRL bash skyrl-test/opd-blog-v2/common/check_configs.sh
 set -euo pipefail
@@ -17,14 +18,13 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 files=()
-while read -r node run script; do
-  [[ -n "$node" ]] || continue
+while read -r stage node job deps script args; do
   for variant in "" --smoke; do
-    out="$tmp/${run}${variant:+_smoke}"
-    V2_DRY_RUN=1 bash "$KIT_DIR/$script" $variant > "$out"
+    out="$tmp/${job}${variant:+_smoke}"
+    V2_DRY_RUN=1 bash "$KIT_DIR/$script" $args $variant > "$out"
     files+=("$out")
   done
-done <<<"$V2_RUNS"
+done < <(v2_jobs)
 cd "$SKYRL_DIR"
 set +e
 .venv/bin/python -I -B "$KIT_DIR/common/check_configs.py" "$KIT_DIR" "${files[@]}" 2>&1 | grep -v -E '^\s*$|UserWarning|warnings.warn'

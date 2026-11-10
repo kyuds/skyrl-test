@@ -1,23 +1,23 @@
 # GCP nodes for opd-blog-v2
 
-Get four spot GPU nodes, set them up, and stop paying when the runs are done. Every command here runs on your Mac,
-from `~/dev/skyrl`. Starting the runs is in each experiment's README.
+Get the spot GPU nodes, set them up, and stop paying when the jobs are done. Every command here runs on your Mac,
+from `~/dev/skyrl`. Starting the jobs is `../orchestrate.sh` (`../README.md`, "Running it").
 
 ## What it asks for
 
 Spot nodes, in every zone of every region that offers them, all requested in parallel:
 
-| Kind | Machine | GPUs | At most | Names | Runs on it |
+| Kind | Machine | GPUs | At most | Names | Used for |
 |---|---|---|---|---|---|
-| B200 | `a4-highgpu-8g` | 8 × B200 | 2 nodes | `kyuds-opd-v2-b200-1`, `-2` | GRPO teacher then phase 1.2; phase 2 |
-| H100 | `a3-highgpu-8g` | 8 × H100 | 2 nodes | `kyuds-opd-v2-h100-1`, `-2` | phase 1.1; phase 3 |
+| B200 | `a4-highgpu-8g` | 8 × B200 | 2 nodes | `kyuds-opd-v2-b200-1`, `-2` | 1a's SFT then 1b; Qwen3-32B's answers, 2c's warm-up, then 2c |
+| H100 | `a3-highgpu-8g` | 8 × H100 | 6 nodes | `kyuds-opd-v2-h100-1` to `-6` | the teacher evals, then 1c, 2a, 2b, 2d and MOPD |
 
-For more, set the caps: `GCP_H100_NODES=4` in front of the commands below adds `h100-3` and `h100-4`, spare
-nodes for runs you add later. The run of each node is set in `../config.sh` (`V2_RUNS`). The B200s take the runs with the most memory: the 8B
-models, and phase 2's 32B teacher. Each node is independent; they do not form a cluster.
+Which job runs on which node is the job table in `../config.sh` (`V2_JOBS`). With fewer H100s, set `V2_NODE_MAP`
+there (`../README.md`, "Fewer nodes"); `GCP_H100_NODES=4` in front of the commands below asks for 4. Each node is
+independent; they do not form a cluster, so every job fits on one node.
 
-Boot disks are 2,000 GB, not the 1,000 GB of the last kit. `b200-1` holds the GRPO run's exports and checkpoints
-(about 540 GB) and then phase 1.2's (about 470 GB).
+Boot disks are 2,000 GB. The largest user is `b200-1`: 1a's checkpoint (about 100 GB) and three exports (16 GB each),
+then 1b's two checkpoints and exports, plus the pretokenized SFT data (about 20 GB).
 
 These are new VMs. The six `kyuds-opd-exp-*` VMs from `opd-full-experiments` are still there, stopped, and billing for
 their disks; that kit's `gcp/down.sh delete` removes them.
@@ -62,8 +62,8 @@ minutes, and anything unexpected is printed.
 
 ## Set the nodes up
 
-This installs everything on every node with a run, at the same time: driver check, the NVMe array, SkyRL at the pinned
-commit with this kit inside it, your W&B and Hugging Face keys, and Ray. It starts no run.
+This installs everything on every node with a job, at the same time: driver check, the NVMe array, SkyRL at the pinned
+commit with this kit inside it, your W&B and Hugging Face keys, and Ray. It starts no job.
 
 The VMs clone the kit from GitHub, so commit and push it first; the script refuses otherwise. Your keys must be in the
 shell, which they are after:
@@ -89,26 +89,15 @@ tail -f ~/opd_v2_setup.log
 ```
 
 It takes 15 to 25 minutes on a fresh node, mostly the software phase, and ends with one line per node: `ready` or
-`FAILED` with a log path. Without `--only` it sets up the nodes with a run in `config.sh`; `--only b200-1,h100-3`
-sets up exactly those, with a run or not. It may run while `01_create_nodes.sh` is still asking for the others, so a
-node can start its run while the rest arrive. Only one copy runs at a time. Keys go over ssh's stdin into
+`FAILED` with a log path. Without `--only` it sets up the nodes with a job in `config.sh`; `--only b200-1,h100-3`
+sets up exactly those, with a job or not. It may run while `01_create_nodes.sh` is still asking for the others, so a
+node can start its jobs while the rest arrive. Only one copy runs at a time. Keys go over ssh's stdin into
 `~/.opd_secrets` on the VM, mode 600; they are never on a command line, printed, or in this repo.
 
-## Check on the runs
+## Check on the nodes
 
-One line per run: node state, preemptions, step, ETA, log age, GPU use and free disk.
-
-```bash
-bash skyrl-test/opd-blog-v2/status.sh
-```
-
-The same, plus the end of one run's log:
-
-```bash
-bash skyrl-test/opd-blog-v2/status.sh p1_opd_m2rl_sft_from_rl_math
-```
-
-Node-level liveness, and the GPUs each running node holds:
+The jobs' states are `../orchestrate.sh` (`../README.md`). For the nodes themselves, liveness and the GPUs each running
+node holds:
 
 ```bash
 bash skyrl-test/opd-blog-v2/gcp/status.sh alive
@@ -122,14 +111,15 @@ bash skyrl-test/opd-blog-v2/gcp/ssh.sh b200-1
 
 ## After a preemption
 
-A preempted spot VM is stopped, not deleted. Its boot disk keeps the data, checkpoints, exports, logs and keys. The
-NVMe array is wiped, so the HF cache goes with it, and Ray is down.
+A preempted spot VM is stopped, not deleted. Its boot disk keeps the data, checkpoints, exports, models, logs and keys.
+The NVMe array is wiped, so the HF cache goes with it, and Ray is down.
 
-1. `status.sh` shows the node as `PREEMPTED`.
+1. `orchestrate.sh` shows the node's jobs as `node-terminated` (or `node-stopped`).
 2. Run `02_setup_nodes.sh --yes` again, with `--only <node>`. It starts the VM in its zone, rebuilds the array and
    starts Ray. A stopped VM can only restart where it is, so with no capacity there it fails; try again later.
-3. Start the run with the same command as before, from its README. It resumes from its last checkpoint (every 10
-   steps), so at most 10 steps are lost, plus the model downloads again.
+3. Run the same stage again with `orchestrate.sh run <stage> --only <node> --yes`. Done jobs are skipped, the
+   interrupted one resumes from its last checkpoint (every 10 OPD steps, every 250 SFT steps; an eval keeps the GPUs
+   that finished), and the models download again.
 
 ## Stop paying
 
@@ -154,7 +144,7 @@ Set in the environment. `config.sh` in this folder lists them all.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GCP_H100_NODES`, `GCP_B200_NODES` | 2, 2 | Most nodes of each kind |
+| `GCP_H100_NODES`, `GCP_B200_NODES` | 6, 2 | Most nodes of each kind |
 | `GCP_H100_ZONES`, `GCP_B200_ZONES` | empty | Empty means every zone that offers the machine |
 | `GCP_TIMEOUT_SECS` | 14400 | When `01_create_nodes.sh` stops asking |
 | `GCP_BOOT_DISK_GB` | 2000 | Boot disk size |
@@ -163,21 +153,14 @@ State lives in `~/opd-blog-v2-gcp/`, outside this public repo, because gcloud's 
 
 ## Verified and assumed
 
-Verified on 2026-11-09:
+Verified before 2026-11-09, with the previous job layout: `01_create_nodes.sh` got all six nodes, `02_setup_nodes.sh`
+set them up, and all five smoke tests of that layout passed on them. `node_setup.sh` carries the fix for a
+half-stopped Ray cluster (tested on a B200 on 2026-11-02) and the fix for its `stop-run` and `report` messages.
 
-- With real `gcloud`, read-only: `01_create_nodes.sh` plans 2 H100 nodes in 31 zones and 2 B200 nodes in 16, with the
-  current image and 2,000 GB disks; `02_setup_nodes.sh` and `status.sh` find the four nodes, none created yet.
-- Against a stand-in `gcloud`: `status.sh` reports a training, waiting, died, stalled and preempted run correctly and
-  prints the end of a log; `02_setup_nodes.sh` plans, filters with `--only`, and refuses to start without keys.
-- `01_create_nodes.sh`, `down.sh`, `ssh.sh`, `gcp/status.sh` and `vm_startup.sh` are the last kit's, which got six
-  nodes on 2026-10-31, with only names and sizes changed.
-- `node_setup.sh` is the last kit's, including its fix for a half-stopped Ray cluster, which was tested on a B200 on
-  2026-11-02. Its `report` and `stop-run` now take the run's script, so one node can hold two runs one after the other.
-
-Not verified: `02_setup_nodes.sh --yes` end to end. It is the last kit's `launch_all.sh` setup, minus starting a run,
-but this copy has not set up a real node.
+Changed on 2026-11-09 and not yet run on a node: `02_setup_nodes.sh` reads its nodes from the job table instead of
+the old run list.
 
 ## Files
 
 `config.sh` (settings and helpers), `01_create_nodes.sh`, `02_setup_nodes.sh`, `node_setup.sh` (runs on the VM),
-`status.sh`, `ssh.sh`, `down.sh`, `vm_startup.sh` (open-file limits at boot).
+`status.sh` (node liveness), `ssh.sh`, `down.sh`, `vm_startup.sh` (open-file limits at boot).

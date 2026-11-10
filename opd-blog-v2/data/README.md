@@ -1,95 +1,109 @@
 # Data
 
-Every run uses the same data: M2RL's RL data, from arXiv 2602.12566 ("To Mix or To Merge", COLM 2026). It is NVIDIA's
-`Nemotron-3-Nano-RL-Training-Blend` split by domain, so every teacher in this blog is trained on, and distills over,
-the prompts its domain's M2RL expert was RL-trained on.
+Four kinds of data, all written to the boot disk under `~/opd-store/data/v2/`, so they survive a preemption:
 
-You do not need to run anything here: every run script calls `prepare.sh` first, and it skips what is already there.
-To do it by hand on a node, from `~/SkyRL`:
+- **M2RL's RL prompts** (arXiv 2602.12566), NVIDIA's `Nemotron-3-Nano-RL-Training-Blend` split by domain. Sections 2
+  and 3 distill over them.
+- **DeepMath-103K**, the prompts of Thinking Machines' OPD. Section 1 distills over them.
+- **AIME 2024 and 2025**, the in-training eval of every OPD run.
+- **SFT data, pretokenized:** OpenThoughts-3 for 1a, and Qwen3-32B's answers for 2c's warm-up.
+
+You do not need to run anything here. Every job prepares what it needs and skips what is already there. By hand on a
+node, from `~/SkyRL`:
 
 ```bash
 bash skyrl-test/opd-blog-v2/data/prepare.sh
 ```
 
-The first call downloads about 8 GB and takes 10 to 20 minutes. Everything is
-written to the boot disk, so it survives a preemption.
+The first downloads about 8 GB and takes 10 to 20 minutes. 1a's SFT data is written by `1-tml/sft.sh` itself, from
+the settings in its `HYPERPARAMETERS` block: it downloads OpenThoughts-3 (28 GB) and tokenizes 384,000 rows of
+every domain; only b200-1 needs it.
 
 ## What it writes
 
-In `~/opd-store/data/v2/`:
-
 | File | Rows | What | Used by |
 |---|---|---|---|
-| `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | GRPO teacher, phases 1 and 2 |
-| `mopd_train.parquet` | 57,800 | Math above, plus competitive coding (19,169) and instruction following (16,575) | Phase 3 |
-| `aime24.parquet`, `aime25.parquet` | 30 each | AIME 2024 and 2025 | Eval for every run |
+| `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | 2a to 2d, 2c's traces |
+| `mopd_train.parquet` | 57,800 | Math above, plus competitive coding (19,169) and instruction following (16,575) | MOPD |
+| `deepmath_train.parquet` | about 103,000 | DeepMath-103K: the question alone, graded against `final_answer` | 1b, 1c |
+| `aime24.parquet`, `aime25.parquet` | 30 each | AIME 2024 and 2025, M2RL's prompt | Every OPD run's eval, and `0-evals` |
+| `sft_ot3_all_384000/` | 384,000 | OpenThoughts-3, every domain, pretokenized | 1a |
+| `sft_2c_qwen3_32b_traces/` | up to 22,056 | Qwen3-32B's correct answers, pretokenized | 2c's warm-up |
 
-Science, agent and structured-output rows of the blend are left out: no run uses them.
+Each SFT folder has a `<folder>.stats.json` beside it: rows, finished and unfinished answers, rows cut at the length
+limit, tokens. It sits outside the folder because SkyRL's SFT loader reads every `.json` inside as data.
 
-Each row has `prompt` (a chat), `env_class`, `reward_model.ground_truth`, `data_source`, `skyrl_mopd_domain`
-(`math`, `code` or `if`: the teacher that scores the row in phase 3) and `extra_info` (its line in the blend and
-NVIDIA's pass rate). `prepare_data.py` stops if the counts differ from the paper's, so a changed blend cannot slip in.
+Science, agent and structured-output rows of the blend are left out: no job uses them. SkyRL drops prompts over
+2,048 tokens, as M2RL did; in a 1,112-row slice of the blend that was 4 rows.
 
-SkyRL drops prompts over 2,048 tokens, as M2RL did. In a 1,112-row slice of the blend that was 4 rows: 3 code, 1 IF.
+## The RL prompts
 
-## The prompts
+- **Math (M2RL):** `Solve the following math problem step by step. The last line of your response should be of the
+  form Answer: $Answer (without quotes) where $Answer is the answer to the problem.`, a blank line, then the blend's
+  question, which already asks for `\boxed{}`.
+- **Code and IF (M2RL):** the blend's prompt, unchanged.
+- **AIME (M2RL):** the math instruction with `Answer: \boxed{$Answer}`, then the problem.
+- **DeepMath (Thinking Machines):** the `question` column alone, as their cookbook's `distillation/datasets.py` sends it.
 
-Exactly M2RL's (`data/process_rl_data.py` and `data/download_aime.py` in github.com/Mosi-AI/M2RL):
+The blend stores its DAPO and Skywork rows as pointers; `prepare_data.py` fills them the way the blend's own
+`create_nanov3_jsonl.py` does, and stops if the counts differ from the paper's.
 
-- **Math:** `Solve the following math problem step by step. The last line of your response should be of the form
-  Answer: $Answer (without quotes) where $Answer is the answer to the problem.` then a blank line and the blend's
-  question. The question already ends with `Don't forget to put your answer in \boxed{}.` (DAPO rows) or
-  `Remember to put your final answer inside \boxed{}.` (Skywork rows), so the prompt asks for both forms.
-- **Code and IF:** the blend's prompt, unchanged. Code prompts ask for one Python block; IF prompts start with
-  `Please follow these instructions in your response:`.
-- **AIME:** the math instruction with `Answer: \boxed{$Answer}`, then the problem.
+## The SFT data
 
-The blend stores its DAPO and Skywork rows as pointers. `prepare_data.py` fills them from the source datasets the way
-the blend's own `create_nanov3_jsonl.py` does, line for line.
+`prepare_sft.py` tokenizes each row as the OPD student will see it, with a post-trained Qwen3 tokenizer:
 
-Every source is pinned to a revision, so every node writes the same rows:
+- prompt, no loss: `<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n`
+- answer, loss: `<think>\n{reasoning}\n</think>\n\n{final answer}<|im_end|>`
+
+**OpenThoughts-3** follows Thinking Machines' cookbook at `330b73d8d7` (2025-10-27, the blog's version): the set
+shuffled, the first 128 × 3,000 = 384,000 rows of every domain (850,000 math, 250,000 code and 100,000 science rows in
+the whole set, per its [dataset card][ot3]), cut at 16,384 tokens. The shuffle is seeded here instead of their
+streaming buffer, so the rows are not theirs.
+
+OpenThoughts-3 keeps QwQ-32B's answers that ran out of tokens before closing their think block: 62% of one code
+shard, 68% of one math shard and 12% of one science shard (checked 2026-11-09). The cookbook trains on them as they
+are, so they stay, as `<think>\n{reasoning so far}` with no `</think>` and no end token. The model is never taught to
+stop mid-thought. In a 300-row sample, 148 rows were finished, 13 finished but cut, 139 unfinished (all cut at 16,384),
+and the mean was 13,131 tokens, so 384,000 rows are about 5 billion tokens.
+
+**2c's traces** keep only Qwen3-32B's correct answers that finished within 16,384 tokens (`2-alignment/README.md`).
+
+## Sources, pinned
 
 | Source | Revision |
 |---|---|
 | `nvidia/Nemotron-3-Nano-RL-Training-Blend` | `74d18444` |
 | `BytedTsinghua-SIA/DAPO-Math-17k` | `65877096` |
 | `Skywork/Skywork-OR1-RL-Data` (math) | `1cdedc52` |
+| `zwhe99/DeepMath-103K` | `5cf055d1` |
+| `open-thoughts/OpenThoughts3-1.2M` | `61bcf9d4` |
 | `math-ai/aime24` | `83a7f387` |
 | `math-ai/aime25` | `563bb840` |
 
-## How answers are graded
+## How math answers are graded
 
 `common/kit_main.py` registers two environments.
 
 - **`opd_v2_math`, math rows:** reward 1 or 0. It takes the answer after the last `</think>`, from the last
-  `\boxed{}` or else the last `Answer:` line, and compares it with math-verify. An answer whose thinking never closes was
-  cut off and scores 0. The reward trains the GRPO teacher; under OPD it is only logged.
-- **`opd_v2_noreward`, code and IF rows:** reward 0. OPD learns from its teacher alone, so phase 3 needs no sandbox
-  and no IF checker to train.
+  `\boxed{}` or else the last `Answer:` line, and compares it with math-verify. An answer whose thinking never closes
+  was cut off and scores 0. Under OPD the reward is only logged, as a train-time accuracy.
+- **`opd_v2_noreward`, code and IF rows:** reward 0. OPD learns from its teacher alone, so MOPD needs no sandbox and no
+  IF checker to train.
 
-SkyRL's own `aime` env would not do: it compares strings, which suits DAPO's integer answers but not Skywork's. 125
-of 444 sampled math answers are not integers, like `\frac{13}{4}`, and a correct `3.25` would score 0.
-
-One limit: SkyRL pins ANTLR 4.9.3 (through omegaconf), and math-verify's parser for that version leaves percentages
-unparsed. The grader drops `%` from both sides, so `20` matches `20\%`, but `0.2` does not.
-
-## Chat templates
-
-Nothing is changed. An OPD teacher scores the student's exact token ids, so a teacher whose chat template differed
-from the student's would be scoring a format it never produced. M2RL-SFT, the three M2RL experts and Qwen3-32B share
-one template, byte for byte (checked on 2026-11-09), so every M2RL run uses `Jackwang111/M2RL-SFT` as published. The
-Qwen3-8B runs use Qwen3-8B's template with `enable_thinking: false` for student and teacher alike.
+SkyRL pins ANTLR 4.9.3 (through omegaconf), and math-verify's parser for that version leaves percentages unparsed.
+The grader drops `%` from both sides, so `20` matches `20\%`, but `0.2` does not. `0-evals` grades math with the same
+function.
 
 ## Verified and assumed
 
 Verified on 2026-11-09, on the Mac:
 
-- `prepare_data.py` on the first 80 MB of the real blend, with the pinned DAPO and Skywork sources: 444 math, 343 code
-  and 325 IF rows. The prompts match M2RL's processing, and AIME has 30 problems per year with integer answers.
-- SkyRL's own dataset loader reads `mopd_train.parquet`: each row keeps its `env_class`, and `skyrl_mopd_domain`
-  reaches the environment's extras, where MOPD's router reads it. 4 of 1,112 prompts were over 2,048 tokens.
-- The grader: 15 cases, run off the main thread as SkyRL's generator does, with math-verify 0.9.0 and ANTLR 4.9.3:
-  fractions, decimals, `\dfrac`, percentages, matrices, expressions, unclosed thinking, and answers before `</think>`
-  ignored. All 125 sampled non-integer answers parse symbolically.
+- `prepare_data.py` on the first 80 MB of the real blend: 444 math, 343 code and 325 IF rows, M2RL's prompts.
+- `prepare_sft.py` on 300 OpenThoughts-3 rows and on a 2-row traces file: the rows decode to the layout above, an
+  unfinished answer has no end token, a finished one ends in `<|im_end|>`, and SkyRL's own `load_from_pretokenized`
+  reads the folder (300 rows, loss on the answer only).
 
-Not verified: the full blend's counts. The script checks them on the first real run.
+Not verified: the full blend's counts and DeepMath's row count (both checked on the first real run), and the time
+and memory of tokenizing 384,000 rows on a node.
+
+[ot3]: https://huggingface.co/datasets/open-thoughts/OpenThoughts3-1.2M

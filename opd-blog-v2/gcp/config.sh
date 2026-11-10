@@ -17,7 +17,7 @@ fi
 
 # ---- what 01_create_nodes.sh asks for ----
 # The most nodes of each kind. Each node has a fixed name, so these are hard caps. 0 turns a kind off.
-GCP_H100_NODES="${GCP_H100_NODES:-2}"
+GCP_H100_NODES="${GCP_H100_NODES:-6}"
 GCP_B200_NODES="${GCP_B200_NODES:-2}"
 GCP_H100_MACHINE_TYPE="${GCP_H100_MACHINE_TYPE:-a3-highgpu-8g}"
 GCP_B200_MACHINE_TYPE="${GCP_B200_MACHINE_TYPE:-a4-highgpu-8g}"
@@ -49,16 +49,16 @@ GCP_IMAGE_PROJECT="${GCP_IMAGE_PROJECT:-deeplearning-platform-release}"
 # Ubuntu 22.04, Python 3.12, driver 580 preinstalled. Families get retired; 01_create_nodes.sh checks this one and
 # lists the current ones if it is gone.
 GCP_IMAGE_FAMILY="${GCP_IMAGE_FAMILY:-pytorch-2-9-cu129-ubuntu-2204-nvidia-580}"
-# Checkpoints and HF exports go to the boot disk, the only disk a preemption leaves intact. b200-1 holds the 8B GRPO
-# run and then phase 1.2: about 540GB for the first (8 exports of 33GB, 3 checkpoints of 92GB while one saves) and
-# 470GB for the second, past 1000GB together. 2000GB costs little next to the GPUs.
+# Checkpoints, exports, models and data go to the boot disk, the only disk a preemption leaves intact. b200-1 holds
+# 1a's SFT (a ~100GB checkpoint, three 16GB exports, 20GB of pretokenized data) and then 1b's OPD checkpoints and
+# exports. 2000GB costs little next to the GPUs.
 GCP_BOOT_DISK_GB="${GCP_BOOT_DISK_GB:-2000}"
 GCP_NETWORK="${GCP_NETWORK:-b200-vpc}"      # auto-mode: it has a subnet called b200-vpc in every region
 GCP_SUBNET="${GCP_SUBNET:-b200-vpc}"
 GCP_TAGS="${GCP_TAGS:-b200-train,kyuds-opd}"
 
 # ---- the nodes ----
-# Named <prefix>-<kind>-<id>: kyuds-opd-v2-h100-1, -2 and kyuds-opd-v2-b200-1, -2. VM names take only lowercase
+# Named <prefix>-<kind>-<id>: kyuds-opd-v2-h100-1 to -6 and kyuds-opd-v2-b200-1, -2. VM names take only lowercase
 # letters, digits and hyphens. The scripts below accept the short form too: h100-1.
 GCP_NODE_PREFIX="${GCP_NODE_PREFIX:-kyuds-opd-v2}"
 node_name()  { echo "$GCP_NODE_PREFIX-$1-$2"; }

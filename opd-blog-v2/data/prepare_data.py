@@ -9,6 +9,8 @@ Outputs (one row per prompt; ``prompt`` is a chat, every other column reaches th
   math_train.parquet  M2RL's math set: the blend's DAPO-17k and Skywork-OR1 (no OmniMath) rows, 22,056 in the paper.
   mopd_train.parquet  the math set plus the blend's competitive-coding (19,169) and instruction-following (16,575)
                       rows, each labelled with its teacher in ``skyrl_mopd_domain``: math, code or if.
+  deepmath_train.parquet  DeepMath-103K, the prompts of Thinking Machines' OPD (section 1): the question alone, as
+                      their cookbook's distillation/datasets.py sends it, graded against final_answer.
   aime24.parquet, aime25.parquet   30 problems each.
 
 The prompts follow M2RL's data/process_rl_data.py and data/download_aime.py. Math gets M2RL's DAPO-style instruction
@@ -30,6 +32,7 @@ from huggingface_hub import hf_hub_download
 BLEND = ("nvidia/Nemotron-3-Nano-RL-Training-Blend", "74d1844434885be8237369edaaf534f84fd53d87", "train.jsonl")
 DAPO = ("BytedTsinghua-SIA/DAPO-Math-17k", "65877096c24ffa7abc4e4fa5edb95cf3413a5674", "data/dapo-math-17k.parquet")
 SKYWORK = ("Skywork/Skywork-OR1-RL-Data", "1cdedc52e0e2db85fdf252f9be682e63a5a38c33", "data/math-00000-of-00001.parquet")
+DEEPMATH = ("zwhe99/DeepMath-103K", "5cf055d1fe3d7a2eb19719ac020211469736ae44", 10)  # repo, revision, shards
 AIME24 = ("math-ai/aime24", "83a7f387baaa524a8bda0022eac0541582297103", "test-00000-of-00001.parquet")
 AIME25 = ("math-ai/aime25", "563bb8404243c5f09de6ec262f2db674fe5bce9b", "test.jsonl")
 
@@ -161,6 +164,19 @@ def blend_rows(blend_path: str, limit: Optional[int]) -> Dict[str, List[Dict]]:
     return by_domain
 
 
+def deepmath_rows() -> List[Dict]:
+    repo, revision, shards = DEEPMATH
+    rows = []
+    for i in range(shards):
+        path = hf_hub_download(repo, f"data/train-{i:05d}-of-{shards:05d}.parquet", repo_type="dataset", revision=revision)
+        table = pq.read_table(path, columns=["question", "final_answer", "difficulty"])
+        for r in table.to_pylist():
+            prompt = [{"role": "user", "content": r["question"]}]
+            extra = {"difficulty": float(r["difficulty"] or 0.0)}
+            rows.append(row(prompt, "math", str(r["final_answer"]), "deepmath-103k", extra))
+    return rows
+
+
 def aime_rows(spec, year: int) -> List[Dict]:
     path = hf_hub_download(spec[0], spec[2], repo_type="dataset", revision=spec[1])
     if path.endswith(".jsonl"):
@@ -197,6 +213,8 @@ def main() -> None:
 
     write(by_domain["math"], os.path.join(out, "math_train.parquet"))
     write(by_domain["math"] + by_domain["code"] + by_domain["if"], os.path.join(out, "mopd_train.parquet"))
+    if args.limit is None:
+        write(deepmath_rows(), os.path.join(out, "deepmath_train.parquet"))
     write(aime_rows(AIME24, 2024), os.path.join(out, "aime24.parquet"))
     write(aime_rows(AIME25, 2025), os.path.join(out, "aime25.parquet"))
 

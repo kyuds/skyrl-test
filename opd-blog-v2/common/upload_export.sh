@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs on the VM. Uploads one of a run's HF exports (safetensors + config + tokenizer) to its own folder in the Hub
-# repo. Nothing uploads by itself: pick the step from the run's eval curve on W&B, then, from ~/SkyRL:
-#   bash skyrl-test/opd-blog-v2/common/upload_export.sh --run grpo_qwen3_8b_nothink --step 250
+# repo. Every OPD run uploads its last export when it finishes; this is for any other step, picked from the run's
+# eval curve on W&B. From ~/SkyRL:
+#   bash skyrl-test/opd-blog-v2/common/upload_export.sh --run opd_2b_m2rl_sft_from_qwen3_32b --step 250
 #   bash skyrl-test/opd-blog-v2/common/upload_export.sh --run <run> --step 250 --dry-run   # show what would go where
 #
 # Uploads $EXPORT_ROOT/<run>/global_step_<N>/policy to the folder <run>_step<N> of $V2_HF_REPO (config.sh). --step

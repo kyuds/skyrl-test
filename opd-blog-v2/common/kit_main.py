@@ -24,9 +24,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 import ray
-from skyrl_gym.envs import register
 from skyrl_gym.envs.base_text_env import BaseTextEnv, BaseTextEnvStepOutput
-from skyrl_gym.envs.registration import registry
 
 MATH_ENV = "opd_v2_math"
 NO_REWARD_ENV = "opd_v2_noreward"
@@ -130,11 +128,16 @@ class NoRewardEnv(BaseTextEnv):
 
 def register_envs() -> None:
     """Register both environments in this process, once."""
+    # The registry is looked up through its module, here and now. A module-level `registry` name would be pickled
+    # by value with the Ray entrypoint, so a worker would check the driver's copy, which already has both envs, and
+    # never register them in its own registry ("No registered env with id: opd_v2_math").
+    from skyrl_gym.envs import registration
+
     # math-verify warns on every call that its timeouts are off; that is deliberate here (see is_correct).
     logging.getLogger("math_verify").setLevel(logging.ERROR)
     for name, cls in ((MATH_ENV, MathVerifyEnv), (NO_REWARD_ENV, NoRewardEnv)):
-        if name not in registry:
-            register(id=name, entry_point=cls)
+        if name not in registration.registry:
+            registration.register(id=name, entry_point=cls)
 
 
 @ray.remote(num_cpus=1)

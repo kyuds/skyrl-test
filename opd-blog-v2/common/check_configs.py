@@ -1,7 +1,8 @@
-"""Builds every run's config with SkyRL's own parser and validators, then checks what SkyRL leaves to the GPUs.
+"""Builds every job's config with SkyRL's own parser and validators, then checks what SkyRL leaves to the GPUs.
 
-Called by common/check_configs.sh with one file per run: the mode on the first line, one override per line after it.
-It needs a SkyRL checkout with its .venv (the Mac's is enough: no GPU, no data, nothing downloaded).
+Called by common/check_configs.sh with one file per job: the mode on the first line (opd or sft), one override per line
+after it. An eval or traces job prints a one-line plan instead, shown as it is. It needs a SkyRL checkout with its
+.venv (the Mac's is enough: no GPU, no data, nothing downloaded).
 """
 
 import os
@@ -19,10 +20,35 @@ def load_kit_main(kit_dir):
     return module
 
 
+def check_sft(overrides):
+    from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
+
+    cfg = SFTConfig.from_cli_overrides(overrides)
+    build_skyrl_config_for_sft(cfg)  # validates
+    problems = []
+    gpus = cfg.placement.num_gpus_per_node
+    if cfg.batch_size % (gpus * cfg.micro_train_batch_size_per_gpu):
+        problems.append(f"batch {cfg.batch_size} does not split into {gpus} GPUs x {cfg.micro_train_batch_size_per_gpu}")
+    o = cfg.optimizer_config
+    summary = (
+        f"sft  {cfg.run_name}\n"
+        f"     {cfg.model.path} on {gpus} GPUs ({cfg.strategy}); data {cfg.pretokenized_dataset_paths}\n"
+        f"     batch {cfg.batch_size} (micro {cfg.micro_train_batch_size_per_gpu}/GPU, packed={cfg.remove_microbatch_padding}), "
+        f"{cfg.num_epochs} epoch(s), max {cfg.max_training_steps or '-'} steps, max_length {cfg.max_length}; "
+        f"lr {o.lr:g} {o.scheduler}, warmup {o.num_warmup_steps}, betas {list(o.adam_betas)}, wd {o.weight_decay:g}\n"
+        f"     W&B {cfg.project_name}; checkpoint every {cfg.ckpt_interval}, export every {cfg.hf_save_interval} to {cfg.export_path}"
+    )
+    return summary, problems
+
+
 def check(kit_main, path):
     with open(path) as f:
         lines = [line.rstrip("\n") for line in f if line.strip()]
     mode, overrides = lines[0], lines[1:]
+    if mode.split()[0] in ("eval", "traces"):
+        return mode, []
+    if mode == "sft":
+        return check_sft(overrides)
     cfg = kit_main.build_config(mode, overrides)
     t, g = cfg.trainer, cfg.generator
     problems = []
@@ -58,12 +84,20 @@ def check(kit_main, path):
         + (", ".join(f"teacher {n}={m} on {k}" for n, (m, k) in teachers.items()) or "no teacher")
         + f"\n     {t.train_batch_size} prompts x {g.n_samples_per_prompt}, {updates} optimizer step(s) per step, "
         f"{t.max_training_steps} steps, lr {t.policy.optimizer_config.lr:g}, warmup "
-        f"{t.policy.optimizer_config.num_warmup_steps}, loss {t.algorithm.policy_loss_type}/{t.algorithm.loss_reduction}"
+        f"{t.policy.optimizer_config.num_warmup_steps}, betas {list(t.policy.optimizer_config.adam_betas)}, wd "
+        f"{t.policy.optimizer_config.weight_decay:g}, loss {t.algorithm.policy_loss_type}/{t.algorithm.loss_reduction}"
         f"\n     answers {g.sampling_params.max_generate_length} tokens at T={g.sampling_params.temperature}; eval "
         f"{g.eval_n_samples_per_prompt} x {g.eval_sampling_params.max_generate_length} tokens at "
         f"T={g.eval_sampling_params.temperature}, every {t.eval_interval}; template kwargs {dict(g.chat_template_kwargs)}"
         f"\n     W&B {t.project_name}; exports every {t.hf_save_interval} to {t.export_path}"
     )
+    if mode == "opd":
+        o = t.algorithm.opd
+        clips = {k: getattr(o, k) for k in ("divergence_clip", "advantage_clip_min", "advantage_clip_max") if getattr(o, k) is not None}
+        if o.advantage_log_compress:
+            clips["advantage_log_compress"] = True
+        if clips:
+            summary += f"\n     teacher signal: {clips}"
     return summary, problems
 
 

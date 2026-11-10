@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Run on your Mac. Sets up every node that has a run in ../config.sh, all at the same time: starts the VM if it is
+# Run on your Mac. Sets up every node that has a job in ../config.sh, all at the same time: starts the VM if it is
 # stopped, checks the driver, builds the NVMe array, installs SkyRL at the pinned commit with this kit inside it,
-# copies your keys and starts Ray. It starts no run: each experiment's README says how. Safe to run again at any time,
+# copies your keys and starts Ray. It starts no job: orchestrate.sh does (README.md, "Running it"). Safe to run again at any time,
 # and it is the first step after a preemption (the NVMe array and Ray do not survive one).
 #   bash skyrl-test/opd-blog-v2/gcp/02_setup_nodes.sh                     # the plan; changes nothing
 #   nohup caffeinate -i bash skyrl-test/opd-blog-v2/gcp/02_setup_nodes.sh --yes > ~/opd_v2_setup.log 2>&1 < /dev/null &
-#   ... --only b200-1,h100-3                                              # just these nodes, with a run or not
+#   ... --only b200-1,h100-3                                              # just these nodes, with a job or not
 set -euo pipefail
 GCP_DIR="$(cd "$(dirname "$0")" && pwd)"
 KIT_DIR="$(cd "$GCP_DIR/.." && pwd)"
@@ -28,22 +28,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# The nodes with a run, once each, in config.sh order; or exactly the ones --only names, which may have no run yet
-# (a spare node set up for a run added later).
+# The nodes with a job, once each, in config.sh order (V2_NODE_MAP applied); or exactly the ones --only names, which
+# may have no job yet (a spare node).
 if [[ -n "$ONLY" ]]; then
   NODES="$(tr ',' '\n' <<<"$ONLY" | awk 'NF && !seen[$0]++')"
   bad="$(grep -v -E '^(h100|b200)-[0-9]+$' <<<"$NODES" || true)"
   [[ -z "$bad" ]] || { echo "not a node name: $(tr '\n' ' ' <<<"$bad")(names look like h100-3 or b200-1)" >&2; exit 2; }
 else
-  NODES="$(awk 'NF {print $1}' <<<"$V2_RUNS" | awk '!seen[$0]++')"
+  NODES="$(v2_jobs | awk '{print $2}' | awk '!seen[$0]++')"
 fi
 rows="$(nodes_rows)" || exit 1
 
 echo "kit $KIT_BRANCH, SkyRL ${SKYRL_COMMIT:0:8}"
 for node in $NODES; do
   vm="$(awk -v n="$GCP_NODE_PREFIX-$node" '$1 == n {print $4}' <<<"$rows")"
-  runs="$(awk -v n="$node" '$1 == n {print $2}' <<<"$V2_RUNS" | tr '\n' ' ')"
-  printf '  %-7s %-11s %s\n' "$node" "${vm:-NO-VM}" "${runs:-(no run in config.sh yet)}"
+  jobs="$(v2_jobs | awk -v n="$node" '$2 == n' | wc -l | tr -d ' ')"
+  printf '  %-7s %-11s %s\n' "$node" "${vm:-NO-VM}" "$([[ $jobs == 0 ]] && echo '(no job in config.sh)' || echo "$jobs jobs")"
 done
 if [[ $GO == 0 ]]; then
   echo "Nothing was changed. Add --yes to go."
@@ -164,5 +164,5 @@ for node in $NODES; do
   printf '  %-7s %s\n' "$node" "$result"
   [[ "$result" == ready ]] || rc=1
 done
-echo "Start the runs as each experiment's README says. Check on them with: bash skyrl-test/opd-blog-v2/status.sh"
+echo "Start the jobs with: bash skyrl-test/opd-blog-v2/orchestrate.sh run <stage>   (README.md, \"Running it\")"
 exit $rc
