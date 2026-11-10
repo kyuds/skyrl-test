@@ -5,7 +5,7 @@
 # and it is the first step after a preemption (the NVMe array and Ray do not survive one).
 #   bash skyrl-test/opd-blog-v2/gcp/02_setup_nodes.sh                     # the plan; changes nothing
 #   nohup caffeinate -i bash skyrl-test/opd-blog-v2/gcp/02_setup_nodes.sh --yes > ~/opd_v2_setup.log 2>&1 < /dev/null &
-#   ... --only b200-1,h100-2                                              # just these nodes
+#   ... --only b200-1,h100-3                                              # just these nodes, with a run or not
 set -euo pipefail
 GCP_DIR="$(cd "$(dirname "$0")" && pwd)"
 KIT_DIR="$(cd "$GCP_DIR/.." && pwd)"
@@ -28,18 +28,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# The nodes with a run, once each, in config.sh order.
-NODES="$(awk 'NF {print $1}' <<<"$V2_RUNS" | awk '!seen[$0]++')"
+# The nodes with a run, once each, in config.sh order; or exactly the ones --only names, which may have no run yet
+# (a spare node set up for a run added later).
 if [[ -n "$ONLY" ]]; then
-  NODES="$(while read -r n; do [[ ",$ONLY," == *",$n,"* ]] && echo "$n"; done <<<"$NODES" || true)"
+  NODES="$(tr ',' '\n' <<<"$ONLY" | awk 'NF && !seen[$0]++')"
+  bad="$(grep -v -E '^(h100|b200)-[0-9]+$' <<<"$NODES" || true)"
+  [[ -z "$bad" ]] || { echo "not a node name: $(tr '\n' ' ' <<<"$bad")(names look like h100-3 or b200-1)" >&2; exit 2; }
+else
+  NODES="$(awk 'NF {print $1}' <<<"$V2_RUNS" | awk '!seen[$0]++')"
 fi
-[[ -n "$NODES" ]] || { echo "no node with a run matches --only $ONLY" >&2; exit 2; }
 rows="$(nodes_rows)" || exit 1
 
 echo "kit $KIT_BRANCH, SkyRL ${SKYRL_COMMIT:0:8}"
 for node in $NODES; do
-  printf '  %-7s %-11s %s\n' "$node" "$(awk -v n="$GCP_NODE_PREFIX-$node" '$1 == n {print $4}' <<<"$rows")" \
-    "$(awk -v n="$node" '$1 == n {print $2}' <<<"$V2_RUNS" | tr '\n' ' ')"
+  vm="$(awk -v n="$GCP_NODE_PREFIX-$node" '$1 == n {print $4}' <<<"$rows")"
+  runs="$(awk -v n="$node" '$1 == n {print $2}' <<<"$V2_RUNS" | tr '\n' ' ')"
+  printf '  %-7s %-11s %s\n' "$node" "${vm:-NO-VM}" "${runs:-(no run in config.sh yet)}"
 done
 if [[ $GO == 0 ]]; then
   echo "Nothing was changed. Add --yes to go."
@@ -59,7 +63,9 @@ pushed="$(git ls-remote "$KIT_REPO" "refs/heads/$KIT_BRANCH" 2>/dev/null | awk '
 if [[ -z "$pushed" || "$kit_head" != "$pushed" || -n "$(git -C "$KIT_DIR" status --porcelain -- . 2>/dev/null)" ]]; then
   echo "this kit is not what $KIT_BRANCH on GitHub holds, and the VMs read it from there. Commit and push first." >&2; exit 1
 fi
-if acquire_running; then echo "01_create_nodes.sh is still running: wait for it, or touch $GCP_STATE_DIR/stop" >&2; exit 1; fi
+# Setting up the nodes already up while 01_create_nodes.sh asks for the rest saves their billed idle time. Both may
+# start a stopped VM; if they collide, this script reports the node FAILED and a second run fixes it.
+if acquire_running; then echo "note: 01_create_nodes.sh is still asking for nodes; setting up the ones named here anyway"; fi
 mkdir -p "$STATE/logs"
 if [[ -e "$STATE/setup.pid" ]] && kill -0 "$(cat "$STATE/setup.pid")" 2>/dev/null; then
   echo "another 02_setup_nodes.sh is running (pid $(cat "$STATE/setup.pid"))" >&2; exit 1

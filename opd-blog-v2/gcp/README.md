@@ -12,7 +12,8 @@ Spot nodes, in every zone of every region that offers them, all requested in par
 | B200 | `a4-highgpu-8g` | 8 × B200 | 2 nodes | `kyuds-opd-v2-b200-1`, `-2` | GRPO teacher then phase 1.2; phase 2 |
 | H100 | `a3-highgpu-8g` | 8 × H100 | 2 nodes | `kyuds-opd-v2-h100-1`, `-2` | phase 1.1; phase 3 |
 
-The run of each node is set in `../config.sh` (`V2_RUNS`). The B200s take the runs with the most memory: the 8B
+For more, set the caps: `GCP_H100_NODES=4` in front of the commands below adds `h100-3` and `h100-4`, spare
+nodes for runs you add later. The run of each node is set in `../config.sh` (`V2_RUNS`). The B200s take the runs with the most memory: the 8B
 models, and phase 2's 32B teacher. Each node is independent; they do not form a cluster.
 
 Boot disks are 2,000 GB, not the 1,000 GB of the last kit. `b200-1` holds the GRPO run's exports and checkpoints
@@ -88,7 +89,9 @@ tail -f ~/opd_v2_setup.log
 ```
 
 It takes 15 to 25 minutes on a fresh node, mostly the software phase, and ends with one line per node: `ready` or
-`FAILED` with a log path. `--only b200-1,h100-2` limits it to those nodes. Keys go over ssh's stdin into
+`FAILED` with a log path. Without `--only` it sets up the nodes with a run in `config.sh`; `--only b200-1,h100-3`
+sets up exactly those, with a run or not. It may run while `01_create_nodes.sh` is still asking for the others, so a
+node can start its run while the rest arrive. Only one copy runs at a time. Keys go over ssh's stdin into
 `~/.opd_secrets` on the VM, mode 600; they are never on a command line, printed, or in this repo.
 
 ## Check on the runs
