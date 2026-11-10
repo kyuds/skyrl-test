@@ -25,7 +25,7 @@ v2_init mopd_3_m2rl_sft_from_math_code_if "$@"
 TRAIN_FILE="$MOPD_TRAIN"           # [plan] Nemotron3 math, code, IF: 57,800 prompts. [paper] used all five domains
 PROMPTS=256                        # [paper] batch size 256; [script] --rollout-batch-size 256
 SAMPLES=4                          # [paper] group size 4; [script] --n-samples-per-prompt 4
-STEPS=300                          # [paper] 300 steps ([script] says --num-rollout 400; the paper's number is kept)
+STEPS=400                          # [script] --num-rollout 400 (the paper's appendix A says 300; the kit follows the code)
 LR=1e-6                            # [paper]; [script] --lr 1e-6
 WARMUP=0                           # [script] --lr-decay-style constant, no warmup
 BETAS="[0.9,0.98]"                 # [script] --adam-beta1 0.9 --adam-beta2 0.98

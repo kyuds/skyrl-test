@@ -1,6 +1,6 @@
 """Builds every job's config with SkyRL's own parser and validators, then checks what SkyRL leaves to the GPUs.
 
-Called by common/check_configs.sh with one file per job: the mode on the first line (opd or sft), one override per line
+Called by check_configs.sh with one file per job: the mode on the first line (opd or sft), one override per line
 after it. An eval or traces job prints a one-line plan instead, shown as it is. It needs a SkyRL checkout with its
 .venv (the Mac's is enough: no GPU, no data, nothing downloaded).
 """

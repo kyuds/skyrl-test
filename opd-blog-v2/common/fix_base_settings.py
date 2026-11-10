@@ -1,13 +1,23 @@
-"""Writes a chat-ready copy of a model: its weights, with the tokenizer and generation config of a post-trained Qwen3.
+"""Fixes a Qwen3 Base model's settings files so it can be run like a chat model: copies the weights, and takes the
+settings files (tokenizer, generation config, end token and context length in config.json) from the post-trained Qwen3
+of the same size. The weights are not changed. Training does not need this; running the model afterwards does.
 
-    cd ~/SkyRL && uv run --isolated --extra fsdp python skyrl-test/opd-blog-v2/common/chat_model.py \\
-        --weights <export dir or Hub id> --tokenizer-from Qwen/Qwen3-8B --out ~/opd-store/models/<name>
+    cd ~/SkyRL && uv run --isolated --extra fsdp python skyrl-test/opd-blog-v2/common/fix_base_settings.py \\
+        --weights Qwen/Qwen3-8B-Base --tokenizer-from Qwen/Qwen3-8B --out ~/opd-store/models/<name>
 
-Why: a Qwen3 Base model's tokenizer and generation config end a sequence at <|endoftext|> (151643), while a chat turn
-ends at <|im_end|> (151645). vLLM stops at the generation config's end tokens, so a Base model, or a model SFT'd from
-one and saved with the Base tokenizer, would not stop at the end of its answer. The post-trained Qwen3 files list
-both end tokens, and their chat template renders a one-turn prompt exactly like the Base template does (checked
-2026-11-09: '<|im_start|>user\\n...<|im_end|>\\n<|im_start|>assistant\\n' from both), so the swap changes nothing else.
+Why: a Qwen3 Base model is packaged as a text completer, not a chat model, in two ways that matter once its teacher
+is a post-trained Qwen3 (whose answers end at <|im_end|>) and its evals are 32k tokens long:
+  1. Its generation config ends a sequence at <|endoftext|> (151643) only. A chat answer ends at <|im_end|> (151645).
+     vLLM stops at the generation config's end tokens, so a Base model, or one SFT'd to end its answers at <|im_end|>,
+     writes <|im_end|> and carries on, often into a made-up next turn, until it happens to write <|endoftext|> or hits
+     the length limit. (Thinking Machines' renderer avoids this by passing <|im_end|> as a stop to the sampler.)
+  2. Its config says 32,768 positions, the post-trained Qwen3's 40,960. vLLM refuses a context longer than the
+     config's, and the evals need the prompt + 32,768 tokens (38,912 for Qwen's AIME).
+The post-trained Qwen3 of the same size has the same weights layout and differs in exactly these files and fields
+(checked 2026-11-10), and its chat template renders a one-turn prompt exactly like the Base template does (checked
+2026-11-09: '<|im_start|>user\\n...<|im_end|>\\n<|im_start|>assistant\\n' from both), so the swap changes nothing
+else. Used once, on Qwen3-8B-Base before 1a's SFT (run_lib.sh, v2_fix_base): SkyRL's export keeps the starting
+model's config, generation config and tokenizer, so 1a's output inherits the fix.
 
 Only the weights and the architecture config are taken from --weights; every tokenizer file comes from
 --tokenizer-from, so a stale chat_template.jinja in an export cannot override the post-trained template.

@@ -9,16 +9,16 @@ Stage 1, before anything trains against these models:
 
 | Job | Node | Model | Benchmarks | Published target |
 |---|---|---|---|---|
-| `eval_qwen3_8b_math` | h100-1 | `Qwen/Qwen3-8B` | AIME 24, 25 | 76.0, 67.3 ([qwen3] Table 17, thinking) |
-| `eval_qwen3_32b_math` | h100-2 | `Qwen/Qwen3-32B` | AIME 24, 25 | 81.4, 72.9 ([qwen3] Table 13, thinking) |
-| `eval_m2rl_sft_math` | h100-3 | `Jackwang111/M2RL-SFT` | AIME 24, 25 | 56.04, 51.30 ([m2rl] Table 3) |
-| `eval_m2rl_rl_math_math` | h100-4 | `Jackwang111/M2RL-RL_Math` | AIME 24, 25 | 77.66, 70.42 |
-| `eval_m2rl_sft_code_if` | h100-5 | `Jackwang111/M2RL-SFT` | LCB v5, v6, IFEval, IFBench | 55.92, 52.00, 79.48, 38.44 |
-| `eval_m2rl_rl_coding_code` | h100-6 | `Jackwang111/M2RL-RL_Coding` | LCB v5, v6 | 65.00, 58.86 |
-| `eval_m2rl_rl_if_if` | h100-6 | `Jackwang111/M2RL-RL_IF` | IFEval, IFBench | 90.94, 59.52 |
+| `eval_qwen3_8b_math` | h100-3 | `Qwen/Qwen3-8B` | AIME 24, 25 | 76.0, 67.3 ([qwen3] Table 17, thinking) |
+| `eval_qwen3_32b_math` | b200-2 | `Qwen/Qwen3-32B` | AIME 24, 25 | 81.4, 72.9 ([qwen3] Table 13, thinking) |
+| `eval_m2rl_sft_math` | h100-1 | `Jackwang111/M2RL-SFT` | AIME 24, 25 | 56.04, 51.30 ([m2rl] Table 3) |
+| `eval_m2rl_rl_math_math` | h100-2 | `Jackwang111/M2RL-RL_Math` | AIME 24, 25 | 77.66, 70.42 |
+| `eval_m2rl_sft_code_if` | h100-4 | `Jackwang111/M2RL-SFT` | LCB v5, v6, IFEval, IFBench | 55.92, 52.00, 79.48, 38.44 |
+| `eval_m2rl_rl_coding_code` | h100-4 | `Jackwang111/M2RL-RL_Coding` | LCB v5, v6 | 65.00, 58.86 |
+| `eval_m2rl_rl_if_if` | h100-4 | `Jackwang111/M2RL-RL_IF` | IFEval, IFBench | 90.94, 59.52 |
 
-Later stages: `eval_sft_1a` (target: Thinking Machines' 60% on AIME 2024), and one `eval_<run>_final` after every
-OPD run, on its last export.
+Later stages: `eval_sft_1a` on b200-1 before 1b (target: Thinking Machines' 60% on AIME 2024), and one
+`eval_<run>_final` after every OPD run, on its last export, on the node that trained it.
 
 **Pass mark:** within about 3 points of the published number. AIME's 30 problems at 64 samples each give a standard
 error near 1 point, so 3 points is a real difference. A model that misses is not used until the gap is understood:

@@ -25,7 +25,7 @@ every domain; only b200-1 needs it.
 |---|---|---|---|
 | `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | 2a to 2d, 2c's traces |
 | `mopd_train.parquet` | 57,800 | Math above, plus competitive coding (19,169) and instruction following (16,575) | MOPD |
-| `deepmath_train.parquet` | about 103,000 | DeepMath-103K: the question alone, graded against `final_answer` | 1b, 1c |
+| `deepmath_train.parquet` | about 103,000 | DeepMath-103K: the question alone, graded against `final_answer` | 1b |
 | `aime24.parquet`, `aime25.parquet` | 30 each | AIME 2024 and 2025, M2RL's prompt | Every OPD run's eval, and `0-evals` |
 | `sft_ot3_all_384000/` | 384,000 | OpenThoughts-3, every domain, pretokenized | 1a |
 | `sft_2c_qwen3_32b_traces/` | up to 22,056 | Qwen3-32B's correct answers, pretokenized | 2c's warm-up |

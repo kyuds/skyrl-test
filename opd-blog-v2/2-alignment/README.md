@@ -22,9 +22,9 @@ against 0.11 to RL_Math. Qwen3-32B's chat template renders the student's prompts
 | `traces_2c_qwen3_32b` | 1 | b200-2 | 2c's warm-up data: Qwen3-32B's answers |
 | `sft_2c_m2rl_sft_warmup` | 2 | b200-2 | 2c's warm-up SFT |
 | `opd_2c_m2rl_warmup_from_qwen3_32b` | 2 | b200-2 | 2c |
-| `opd_2b_m2rl_sft_from_qwen3_32b` | 2 | h100-2 | 2b |
+| `opd_2b_m2rl_sft_from_qwen3_32b` | 2 | h100-1 | 2b |
 | `opd_2d_m2rl_sft_from_qwen3_32b_clip` | 2 | h100-3 | 2d |
-| `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-4 | 2a |
+| `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-2 | 2a |
 | `eval_opd_2*_final` | | | each run's last export at 64 samples, M2RL's settings |
 
 Each OPD run waits for its teacher's and its student's evals (`../0-evals`): Qwen3-32B or RL_Math, and M2RL-SFT.
@@ -40,7 +40,7 @@ same block with three.
 | Teacher | 2a: `Jackwang111/M2RL-RL_Math`, 4 engines × 1 GPU. 2b to 2d: `Qwen/Qwen3-32B`, thinking, 2 engines × 2 GPUs on H100s (4 × 1 on B200s) | the proposal |
 | Prompts | M2RL's math set, 22,056 (`../data/README.md`), up to 2,048 tokens | [paper] appendix A; [script] `--rollout-max-prompt-len 2048` |
 | Batch | 256 prompts × 4 samples, one update per step | [paper]: batch size 256, group size 4, "gradient update is conducted per 1024 rollouts"; [script] |
-| Steps | 300 | [paper]. [script] says `--num-rollout 400`; the paper's number is kept |
+| Steps | 400 | [script] `--num-rollout 400`. The paper's appendix A says 300; the code's number is used |
 | Learning rate | 1e-6, constant, no warmup | [paper]; [script] `--lr 1e-6 --lr-decay-style constant` |
 | Optimizer | Adam, betas 0.9 and 0.98, weight decay 0.1 | [script] `--adam-beta1 0.9 --adam-beta2 0.98 --weight-decay 0.1` |
 | Grad clip | 1.0 | [slime] `--clip-grad` default, which the script leaves alone |

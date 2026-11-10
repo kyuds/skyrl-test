@@ -9,11 +9,11 @@ Spot nodes, in every zone of every region that offers them, all requested in par
 
 | Kind | Machine | GPUs | At most | Names | Used for |
 |---|---|---|---|---|---|
-| B200 | `a4-highgpu-8g` | 8 × B200 | 2 nodes | `kyuds-opd-v2-b200-1`, `-2` | 1a's SFT then 1b; Qwen3-32B's answers, 2c's warm-up, then 2c |
-| H100 | `a3-highgpu-8g` | 8 × H100 | 6 nodes | `kyuds-opd-v2-h100-1` to `-6` | the teacher evals, then 1c, 2a, 2b, 2d and MOPD |
+| B200 | `a4-highgpu-8g` | 8 × B200 | 2 nodes | `kyuds-opd-v2-b200-1`, `-2` | 1a's SFT, its eval, then 1b; Qwen3-32B's eval and answers, 2c's warm-up, then 2c |
+| H100 | `a3-highgpu-8g` | 8 × H100 | 4 nodes | `kyuds-opd-v2-h100-1` to `-4` | the M2RL and Qwen3-8B evals, then 2b, 2a, 2d and MOPD |
 
 Which job runs on which node is the job table in `../config.sh` (`V2_JOBS`). With fewer H100s, set `V2_NODE_MAP`
-there (`../README.md`, "Fewer nodes"); `GCP_H100_NODES=4` in front of the commands below asks for 4. Each node is
+there (`../README.md`, "Fewer nodes"); `GCP_H100_NODES=3` in front of the commands below asks for 3. Each node is
 independent; they do not form a cluster, so every job fits on one node.
 
 Boot disks are 2,000 GB. The largest user is `b200-1`: 1a's checkpoint (about 100 GB) and three exports (16 GB each),
@@ -144,7 +144,7 @@ Set in the environment. `config.sh` in this folder lists them all.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GCP_H100_NODES`, `GCP_B200_NODES` | 6, 2 | Most nodes of each kind |
+| `GCP_H100_NODES`, `GCP_B200_NODES` | 4, 2 | Most nodes of each kind |
 | `GCP_H100_ZONES`, `GCP_B200_ZONES` | empty | Empty means every zone that offers the machine |
 | `GCP_TIMEOUT_SECS` | 14400 | When `01_create_nodes.sh` stops asking |
 | `GCP_BOOT_DISK_GB` | 2000 | Boot disk size |

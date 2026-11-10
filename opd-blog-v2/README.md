@@ -1,7 +1,7 @@
 # OPD blog v2
 
 The experiments behind the OPD blog post, as planned on 2026-11-10 with Charlie Ruan. Everything runs on GCP spot
-nodes (2 B200 and 4 to 6 H100, 8 GPUs each) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
+nodes (2 B200 and 4 H100, 8 GPUs each) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
 W&B project `opd-blog-v2` (evals in `opd-blog-v2-evals`), Hub repo `kyuds/opd-blog-v2`.
 
 **Every hyperparameter is in a `HYPERPARAMETERS` block at the top of its run script, each value with the source it
@@ -13,8 +13,8 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
    M2RL-SFT, RL_Math, RL_Coding and RL_IF on AIME, LiveCodeBench and IFEval/IFBench with M2RL's.
    [`0-evals`](0-evals/README.md)
 1. **We support on-policy distillation, as Thinking Machines ran it.** Qwen3-8B-Base SFT'd on 384,000 OpenThoughts-3
-   rows of every domain (1a; target 60% on AIME 2024), then distilled from Qwen3-8B on DeepMath prompts (1b; target 70%). The
-   same distillation on the Base model with no SFT (1c) shows why the SFT comes first. [`1-tml`](1-tml/README.md)
+   rows of every domain (1a; target 60% on AIME 2024), then distilled from Qwen3-8B on DeepMath prompts (1b; target
+   70%). [`1-tml`](1-tml/README.md)
 2. **But OPD breaks easily: initial teacher-student alignment matters.** One student, M2RL-SFT, on M2RL's math
    prompts. 2a: its own RL'd teacher, M2RL-RL_Math (aligned). 2b: Qwen3-32B (stronger, misaligned). Then two fixes for
    2b: 2c, an SFT warm-up on Qwen3-32B's answers; 2d, clipping the teacher's signal. [`2-alignment`](2-alignment/README.md)
@@ -25,7 +25,7 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 
 - Data: Qwen3-32B's answers to M2RL's 22,056 math prompts (2c's warm-up data).
 - 2 SFTs: 1a (8B), 2c's warm-up (4B).
-- 2 OPD runs with an 8B student and Qwen3-8B as teacher: 1b, 1c.
+- 1 OPD run with an 8B student and Qwen3-8B as teacher: 1b.
 - 4 OPD runs with a 4B student (M2RL-SFT): 2a from M2RL-RL_Math (4B), and 2b, 2c, 2d from Qwen3-32B.
 - 1 MOPD run, from three 4B teachers.
 - Plus evals of 7 published models and of every result.
@@ -36,43 +36,58 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 |---|---|
 | [`orchestrate.sh`](orchestrate.sh) | On your Mac: starts each stage's jobs on their nodes, and shows where every job is |
 | [`config.sh`](config.sh) | Every setting shared by the kit, and the job table: stage, node, job, deps, command |
+| [`check_configs.sh`](check_configs.sh) | On your Mac, before pushing: builds every job's config with SkyRL's own validators (with `check_configs.py`) |
 | [`gcp/`](gcp/README.md) | Getting, setting up, and stopping the nodes |
 | [`data/`](data/README.md) | RL prompts, AIME, and the pretokenized SFT data |
 | [`0-evals/`](0-evals/README.md) ... [`3-mopd/`](3-mopd/README.md) | One folder per section: run scripts and a README with every setting |
-| `common/` | What every job shares: the OPD recipe and SFT launcher (`run_lib.sh`), the job runner (`job.sh`, `chain.sh`), the trainer entrypoint (`kit_main.py`), the model fixer (`chat_model.py`), the config check |
+| `common/` | What every job shares on the node: the paths and keys (`00_env.sh`), the OPD recipe and SFT launcher (`run_lib.sh`), the job runner (`job.sh`, `chain.sh`, `job_report.sh`), the trainer entrypoint (`kit_main.py`), the model fixer (`fix_base_settings.py`), export uploads |
 
 ## The plan
 
-Three stages, each started by hand with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only
-for its own deps (`config.sh`), and stage 1's SFT keeps running through stage 2.
+Six nodes: 2 B200 and 4 H100, 8 GPUs each, the six from the earlier smoke tests. Three stages, each started by hand
+with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and
+1a's SFT keeps running through stage 2.
 
-| Node | Stage 1: evals, data, SFT | Stage 2: what can train now | Stage 3: after 1a's SFT |
+| Node | Stage 1: evals, data, SFT (no deps) | Stage 2: OPD, once its evals are done | Stage 3: after 1a |
 |---|---|---|---|
-| b200-1 | `sft_1a`: Qwen3-8B-Base on OpenThoughts-3 (about 1 day) | (still 1a) | `opd_1b`, then its eval |
-| b200-2 | `traces_2c`: Qwen3-32B's answers for 2c | `sft_2c` warm-up, then `opd_2c`, then its eval | |
-| h100-1 | eval: Qwen3-8B on AIME | `opd_1c`, then its eval | |
-| h100-2 | eval: Qwen3-32B on AIME | `opd_2b`, then its eval | |
-| h100-3 | eval: M2RL-SFT on AIME | `opd_2d`, then its eval | |
-| h100-4 | eval: M2RL-RL_Math on AIME | `opd_2a`, then its eval | |
-| h100-5 | eval: M2RL-SFT on LiveCodeBench, IFEval, IFBench | `mopd_3`, then all six benchmarks | |
-| h100-6 | evals: RL_Coding on LiveCodeBench, RL_IF on IFEval and IFBench | (spare) | eval of 1a's SFT model |
+| b200-1 | `sft_1a`: Qwen3-8B-Base on OpenThoughts-3 (about 1 day) | (still 1a) | eval of 1a, `opd_1b`, its eval |
+| b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up, `opd_2c`, its eval | |
+| h100-1 | eval: M2RL-SFT on AIME | `opd_2b` (Qwen3-32B), its eval | |
+| h100-2 | eval: M2RL-RL_Math on AIME | `opd_2a` (RL_Math), its eval | |
+| h100-3 | eval: Qwen3-8B on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | |
+| h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `mopd_3`, then all six benchmarks | |
 
-Why this order:
+What each OPD run waits for:
 
-- **No OPD run starts before its teacher's and its student's published numbers are reproduced.** Each waits for both
-  evals (`config.sh`); MOPD waits for all five M2RL evals. The SFT and the Qwen3-32B answers do not train against a
-  teacher, so they start at once.
-- **The critical path is 1a then 1b** (SFT then OPD of the 8B model), so 1a starts first, alone on a B200.
-- **2c's whole chain runs on the other B200**: Qwen3-32B's answers, the warm-up, then the OPD with Qwen3-32B as teacher.
-  Qwen3-32B fits one B200 GPU but needs two H100s.
+| Run | Node | Waits for |
+|---|---|---|
+| 2b, 2d | h100-1, h100-3 | Qwen3-32B's eval (b200-2) and M2RL-SFT's (h100-1) |
+| 2a | h100-2 | RL_Math's eval and M2RL-SFT's |
+| 2c | b200-2 | its warm-up, which waits for Qwen3-32B's answers; and the same two evals as 2b |
+| MOPD | h100-4 | all five M2RL evals |
+| 1b | b200-1 | 1a's SFT (and its eval, run first on the same node) and Qwen3-8B's eval (h100-3) |
+
+Why this layout:
+
+- **No OPD run starts before its teacher's and its student's published numbers are reproduced.** The SFT and the
+  Qwen3-32B answers do not train against a teacher, so they start at once.
+- **The runs with Qwen3-32B as teacher are probably the longest** (2b and 2d score every rollout with a 32B model on
+  two engines of two GPUs), so their nodes run only one short eval first, and Qwen3-32B's own eval runs on a B200,
+  where it is fastest (8 engines of one GPU), so they can start sooner.
+- **The code and IF evals queue on h100-4**, ahead of MOPD, the only run that needs them. MOPD has 4B teachers, so it
+  can start a few hours later and still finish with the others.
+- **1a, then its eval, then 1b on b200-1**: 1a's AIME score (target 60%) is known before 1b's compute is spent, and
+  nothing has to move between nodes. The eval adds under an hour to the critical path.
+- **2c's whole chain runs on b200-2**: Qwen3-32B's eval, its answers, the warm-up, then the OPD with Qwen3-32B as
+  teacher. Qwen3-32B fits one B200 GPU but needs two H100s.
 - **Every final eval runs on the node that trained the model**, chained after the run, so no export has to move.
-  1a's output goes to the Hub, where the eval on h100-6 fetches it.
 
-**Rough timeline** (none of it measured): stage 1 evals take a few hours (Qwen3-32B's several), Qwen3-32B's answers
-several hours on a B200, 1a about a day (5 billion tokens, estimated at 35% GPU use), each OPD run 1 to 2 days, and
-the runs with Qwen3-32B as teacher on H100s probably longer. End to end, 3 to 4 days. The in-training AIME eval runs
-every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s, roughly 12 hours over a 300-step run (estimated
-from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in each run script change it.
+**Rough timeline** (none of it measured): stage 1's evals take one to a few hours each, so stage 2 can start a few
+hours in (MOPD several hours in); Qwen3-32B's answers take several hours on b200-2; 1a about a day (5 billion tokens,
+estimated at 35% GPU use); each OPD run 1 to 2 days, the Qwen3-32B-teacher runs on H100s probably the longest. End to
+end, 3 to 4 days, set by 1a then 1b or by 2b and 2d. The in-training AIME eval runs every 5 steps at 8 samples: about
+10 to 15 minutes each on 4 H100s, roughly 16 hours over a 400-step run (estimated from vLLM's KV-cache limits, not
+measured). `EVAL_EVERY` and `EVAL_N` in each run script change it.
 
 ## Running it
 
@@ -83,12 +98,12 @@ Every command runs on your Mac, from `~/dev/skyrl`, unless it says otherwise.
 **2. Check the configs** against SkyRL's own validators (all jobs, normal and smoke; no GPU needed):
 
 ```bash
-bash skyrl-test/opd-blog-v2/common/check_configs.sh
+bash skyrl-test/opd-blog-v2/check_configs.sh
 ```
 
 **3. Get and set up the nodes**, as [`gcp/README.md`](gcp/README.md) says: `01_create_nodes.sh`, then
-`02_setup_nodes.sh`. The six nodes from the earlier smoke tests are stopped with their disks; `02_setup_nodes.sh`
-starts them again.
+`02_setup_nodes.sh`. The six nodes from the earlier smoke tests (2 B200, 4 H100) are stopped with their disks;
+`02_setup_nodes.sh` starts them again.
 
 **4. Smoke-test the new parts** (recommended; none of them has run on a GPU yet). On a B200 and an H100, from
 `~/SkyRL` (log in with `bash skyrl-test/opd-blog-v2/gcp/ssh.sh <node>`):
@@ -114,7 +129,7 @@ bash skyrl-test/opd-blog-v2/2-alignment/opd.sh 2b --smoke
 ```
 
 ```bash
-bash skyrl-test/opd-blog-v2/1-tml/opd.sh 1c --smoke
+bash skyrl-test/opd-blog-v2/1-tml/opd.sh --smoke
 ```
 
 On an H100, the Qwen3-32B ones also test two GPUs per engine.
@@ -141,14 +156,16 @@ The end of one job's log:
 bash skyrl-test/opd-blog-v2/orchestrate.sh log eval_qwen3_8b_math
 ```
 
-**7. Before stage 2, read the stage-1 results:** every eval within about 3 points of its target
-([`0-evals/README.md`](0-evals/README.md)). Then:
+**7. Stage 2, as the evals come in.** Before starting a run, check its teacher's and student's evals landed within
+about 3 points of their targets ([`0-evals/README.md`](0-evals/README.md)). Nodes get there at different times:
+h100-1 to h100-3 an hour or two in, h100-4 after its three evals, b200-2 after Qwen3-32B's answers. Each time,
+`orchestrate.sh` with no arguments lists what can start now, and this starts it (a node still busy is skipped):
 
 ```bash
 bash skyrl-test/opd-blog-v2/orchestrate.sh run 2 --yes
 ```
 
-**8. Stage 3** once 1a is done:
+**8. Stage 3** once 1a is done: 1a's eval, then 1b and its eval, on b200-1.
 
 ```bash
 bash skyrl-test/opd-blog-v2/orchestrate.sh run 3 --yes
@@ -159,7 +176,7 @@ the first job whose deps are not done yet. Running a stage again later starts th
 (checkpoints and outputs stay):
 
 ```bash
-bash skyrl-test/opd-blog-v2/orchestrate.sh stop h100-2
+bash skyrl-test/opd-blog-v2/orchestrate.sh stop h100-1
 ```
 
 **After a preemption:** `02_setup_nodes.sh --only <node> --yes`, then the same `run <stage> --only <node> --yes`. The
@@ -167,15 +184,14 @@ interrupted job resumes from its last checkpoint ([`gcp/README.md`](gcp/README.m
 
 ## Fewer nodes
 
-With 4 H100s, move h100-5's jobs after h100-1's and h100-6's after h100-4's, in your Mac's shell, before
-`02_setup_nodes.sh` and `orchestrate.sh`:
+With 3 H100s, move h100-4's jobs after h100-2's, in your Mac's shell, before `02_setup_nodes.sh` and `orchestrate.sh`:
 
 ```bash
-export V2_NODE_MAP="h100-5=h100-1 h100-6=h100-4"
+export V2_NODE_MAP="h100-4=h100-2"
 ```
 
-MOPD then starts after 1c's eval, a day or two later, and 2a a few hours later (after two more evals). The end date
-moves by about as long as 1c takes.
+The code and IF evals then run after RL_Math's, so 2a starts a few hours later, and MOPD waits for 2a's run and eval:
+a day or two more. With 6 H100s there is nothing for the extra two to do.
 
 ## Decisions in this kit
 
@@ -185,11 +201,12 @@ moves by about as long as 1c takes.
 - **1a SFTs on every OpenThoughts-3 domain** (math, code, science), as the cookbook does. `OT3_DOMAINS=math` in
   `1-tml/sft.sh` keeps math only.
 - **Sections 2 and 3 follow M2RL's MT-OPD**: its paper's appendix A and its launch script, pinned at `c94ce97c`. Where
-  they disagree (400 steps in the script, 300 in the paper), the paper wins.
+  they disagree (400 steps in the script, 300 in the paper), the kit follows the script.
 - **2c's warm-up uses Qwen3-32B's answers to all 22,056 math prompts**, the set its OPD then trains on, and M2RL's own
   recipe for SFT on teacher answers (MT-OFF: lr 5e-5, batch 512). No paper gives a warm-up recipe.
-- **Every Base or SFT'd model gets a post-trained Qwen3's tokenizer files and context length**
-  (`common/chat_model.py`), so it stops at `<|im_end|>` and fits the evals' 32,768-token answers.
+- **1a starts from Qwen3-8B-Base with Qwen3-8B's settings files** (`common/fix_base_settings.py`): Qwen3-8B's tokenizer, end
+  tokens and context, so it ends its answers at `<|im_end|>` like its teacher and fits the evals' long answers. SkyRL's
+  export keeps those files, so 1a's output needs nothing more.
 - **Each section's evals use one setting**: the Qwen3 report's for section 1 and the Qwen teachers, M2RL's for sections 2
   and 3 and the M2RL models.
 - **MOPD has three teachers**, math, code and IF; M2RL's had five.
@@ -219,11 +236,11 @@ moves by about as long as 1c takes.
 
 Verified on 2026-11-10, on the Mac:
 
-- `check_configs.sh`: all 50 job configs (25 jobs, normal and smoke) pass SkyRL's own SFT and OPD validators, the GPU
+- `check_configs.sh`: all 46 job configs (23 jobs, normal and smoke) pass SkyRL's own SFT and OPD validators, the GPU
   budget and the length checks, and print the values each run's `HYPERPARAMETERS` block sets.
 - Every source value: the cookbook at `330b73d8d7` and `58e781e78e`, the Tinker SDK of 2025-10-17, M2RL's launch
   script, slime's defaults and loss code at `c94ce97c`, and the Qwen3 report's tables and section 4.6, read directly.
-- `chat_model.py` on Qwen3-0.6B-Base with Qwen3-0.6B's files: ends at `<|im_end|>`, takes the 40,960 context,
+- `fix_base_settings.py` on Qwen3-0.6B-Base with Qwen3-0.6B's files: ends at `<|im_end|>`, takes the 40,960 context,
   renders the student's prompt.
 - `prepare_sft.py` on 300 OpenThoughts-3 rows, read back by SkyRL's own loader. The eval request builder and all
   three graders, on hand-written answers.

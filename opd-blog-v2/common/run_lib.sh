@@ -1,16 +1,16 @@
 # Sourced by every run script. Runs on the VM; with V2_DRY_RUN=1 it also runs on your Mac and only prints the
-# overrides, which is how common/check_configs.sh checks them against SkyRL's real config classes.
+# overrides, which is how check_configs.sh checks them against SkyRL's real config classes.
 #
 #   v2_init <run> "$@"        parses --smoke, sets RUN, PROJECT and the paths, and on the VM loads 00_env.sh
 #   v2_model <spec>           a model path for: a Hub id, kit:<job> (an SFT output) or run:<job> (a run's last export)
-#   v2_chat_base <base> <tok> <name>   a Base model's weights with a post-trained tokenizer, as $MODELS/<name>
+#   v2_fix_base <base> <tok> <name>    a Base model with fixed settings (fix_base_settings.py), as $MODELS/<name>
 #   v2_opd_recipe             prints the OPD overrides from the run script's HYPERPARAMETERS block
 #   v2_tp_32b                 tensor parallelism for Qwen3-32B on this node's GPUs (2 on an H100, 1 on a B200)
 #   v2_teacher <model> <engines> <tp>    prints one teacher's overrides
 #   v2_bookkeeping <tags>     prints the overrides every run shares: logging, checkpoints, exports, resume, eval
 #   v2_collect                reads overrides on stdin into OVERRIDES, adding --smoke's and the extra arguments
 #   v2_launch opd             runs common/kit_main.py with OVERRIDES, then uploads the run's last export
-#   v2_sft                    SFT from the SFT_* variables: train, make the result chat-ready, upload it
+#   v2_sft                    SFT from the SFT_* variables: train, check the result ends turns at <|im_end|>, upload it
 [[ -n "${BASH_VERSION:-}" ]] || { echo "source this file from bash"; return 1 2>/dev/null || exit 1; }
 V2_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 V2_DRY_RUN="${V2_DRY_RUN:-0}"
@@ -72,12 +72,12 @@ v2_model() {
   esac
 }
 
-# Prints $MODELS/<name>: a Base model's weights with a post-trained Qwen3's tokenizer files (common/chat_model.py),
-# written on first use. This is how a Base model is an OPD student (1c) and stops at the end of its turn.
-v2_chat_base() {
+# Prints $MODELS/<name>: a Base model's weights with the post-trained Qwen3's settings files (tokenizer, end tokens,
+# context; common/fix_base_settings.py), written on first use. 1a's SFT starts from it; its output keeps them.
+v2_fix_base() {
   local base="$1" tokenizer_from="$2" name="$3"
   if [[ $V2_DRY_RUN != 1 && ! -f "$MODELS/$name/config.json" ]]; then
-    (cd "$SKYRL_DIR" && uv run --isolated --extra fsdp python "$V2_KIT/common/chat_model.py" \
+    (cd "$SKYRL_DIR" && uv run --isolated --extra fsdp python "$V2_KIT/common/fix_base_settings.py" \
       --weights "$base" --tokenizer-from "$tokenizer_from" --out "$MODELS/$name") >&2 || return 1
   fi
   echo "$MODELS/$name"
@@ -269,12 +269,14 @@ v2_upload_dir() {
   return 1
 }
 
-# Full fine-tuning with SkyRL's SFT trainer on pretokenized data, then the last export becomes $MODELS/$RUN with the
-# tokenizer and generation config of SFT_TOKENIZER_FROM (a post-trained Qwen3, so it stops at <|im_end|>), and goes to
-# the Hub folder $RUN. A preempted run resumes from its last checkpoint; a finished one is not trained again.
+# Full fine-tuning with SkyRL's SFT trainer on pretokenized data. SkyRL's export carries the starting model's settings
+# files (config, generation config, tokenizer), so the result ends its turns at <|im_end|> when the start does: 1a
+# starts from Qwen3-8B-Base with its settings fixed (common/fix_base_settings.py), 2c from M2RL-SFT. The job checks
+# that before uploading. The last export is linked as $MODELS/$RUN and uploaded to the Hub folder $RUN. A preempted
+# run resumes from its last checkpoint; a finished one is not trained again.
 # The run script sets every one of V2_SFT_VARS in its HYPERPARAMETERS block; nothing has a default here.
-V2_SFT_VARS="SFT_BASE SFT_TOKENIZER_FROM SFT_DATA SFT_LR SFT_SCHEDULER SFT_WARMUP SFT_BETAS SFT_WEIGHT_DECAY
-  SFT_GRAD_CLIP SFT_BATCH SFT_MICRO SFT_MAX_LEN SFT_EPOCHS SFT_CKPT_EVERY SFT_HF_EVERY SFT_TAGS"
+V2_SFT_VARS="SFT_BASE SFT_DATA SFT_LR SFT_SCHEDULER SFT_WARMUP SFT_BETAS SFT_WEIGHT_DECAY SFT_GRAD_CLIP SFT_BATCH
+  SFT_MICRO SFT_MAX_LEN SFT_EPOCHS SFT_CKPT_EVERY SFT_HF_EVERY SFT_TAGS"
 v2_sft() {
   local out="$MODELS/$RUN" export_dir v
   for v in $V2_SFT_VARS; do
@@ -331,15 +333,29 @@ v2_sft() {
     (cd "$SKYRL_DIR" && env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp \
       python -m skyrl.train.main_sft "${OVERRIDES[@]}")
     export_dir="$(v2_model "run:$RUN")"
-    echo "=== $RUN finished training at $(date -u +%Y-%m-%dT%H:%M:%SZ); making $export_dir chat-ready as $out"
-    (cd "$SKYRL_DIR" && uv run --isolated --extra fsdp python "$V2_KIT/common/chat_model.py" \
-      --weights "$export_dir" --tokenizer-from "$SFT_TOKENIZER_FROM" --out "$out")
+    echo "=== $RUN finished training at $(date -u +%Y-%m-%dT%H:%M:%SZ): $export_dir"
+    # The OPD student and the evals need a model that ends its turn at <|im_end|> (fix_base_settings.py says why).
+    python3 - "$export_dir" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+gen = json.load(open(os.path.join(d, "generation_config.json"))).get("eos_token_id")
+gen = gen if isinstance(gen, list) else [gen]
+tok = json.load(open(os.path.join(d, "tokenizer_config.json"))).get("eos_token")
+tok = tok.get("content") if isinstance(tok, dict) else tok
+if 151645 not in gen or tok != "<|im_end|>":
+    sys.exit(f"{d} does not end its turn at <|im_end|> (generation eos {gen}, tokenizer eos {tok}): was the SFT "
+             "started from a model with fixed settings (common/fix_base_settings.py)?")
+context = json.load(open(os.path.join(d, "config.json")))["max_position_embeddings"]
+print(f"{d} ends its turn at <|im_end|>; context {context}")
+PY
+    ln -sfn "$export_dir" "$out"
   fi
+  export_dir="$(cd "$out" && pwd -P)"
   if [[ $SMOKE == 1 ]]; then
     rm -rf "${CKPT_ROOT:?}/$RUN" "${EXPORT_ROOT:?}/$RUN" "${out:?}"
     echo "=== $RUN passed"
     return 0
   fi
   # Other nodes fetch it from the Hub (v2_model kit:<job>), so a failed upload fails the job.
-  v2_upload_dir "$out" "$RUN"
+  v2_upload_dir "$export_dir" "$RUN"
 }

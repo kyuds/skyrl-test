@@ -3,10 +3,10 @@
 # --smoke, with SkyRL's own parser and validators (as the job would): the OPD runs' and the SFT runs'. It checks the GPU
 # budget and lengths, which SkyRL only finds out on the node, and prints what each job will do (evals included).
 # Needs the SkyRL checkout at the pinned commit.
-#   bash skyrl-test/opd-blog-v2/common/check_configs.sh
-#   SKYRL_DIR=/path/to/SkyRL bash skyrl-test/opd-blog-v2/common/check_configs.sh
+#   bash skyrl-test/opd-blog-v2/check_configs.sh
+#   SKYRL_DIR=/path/to/SkyRL bash skyrl-test/opd-blog-v2/check_configs.sh
 set -euo pipefail
-KIT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+KIT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$KIT_DIR/config.sh"
 SKYRL_DIR="${SKYRL_DIR:-$(cd "$KIT_DIR/../.." && pwd)/SkyRL}"
 [[ -x "$SKYRL_DIR/.venv/bin/python" ]] || { echo "no SkyRL checkout with a .venv at $SKYRL_DIR; set SKYRL_DIR" >&2; exit 2; }
@@ -27,5 +27,5 @@ while read -r stage node job deps script args; do
 done < <(v2_jobs)
 cd "$SKYRL_DIR"
 set +e
-.venv/bin/python -I -B "$KIT_DIR/common/check_configs.py" "$KIT_DIR" "${files[@]}" 2>&1 | grep -v -E '^\s*$|UserWarning|warnings.warn'
+.venv/bin/python -I -B "$KIT_DIR/check_configs.py" "$KIT_DIR" "${files[@]}" 2>&1 | grep -v -E '^\s*$|UserWarning|warnings.warn'
 exit "${PIPESTATUS[0]}"

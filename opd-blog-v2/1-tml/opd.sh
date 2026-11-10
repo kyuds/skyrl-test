@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
-# Runs on the VM, on all 8 GPUs. Section 1's OPD, Thinking Machines' recipe, teacher Qwen3-8B in thinking mode:
-#   1b  1a's output (sft_1a_qwen3_8b_base_ot3, fetched from the Hub when not on this node)
-#   1c  Qwen3-8B-Base itself, no SFT
-# See README.md in this folder. From ~/SkyRL:
-#   bash skyrl-test/opd-blog-v2/common/job.sh opd_1c_qwen3_8b_base_from_qwen3_8b    # as orchestrate.sh runs it
-#   bash skyrl-test/opd-blog-v2/1-tml/opd.sh 1c --smoke                             # 2 tiny steps
-# Anything after the variant is passed to SkyRL as an extra override. Preempted? Run it again; it resumes.
+# Runs on the VM, on all 8 GPUs. 1b: OPD of 1a's output (sft_1a_qwen3_8b_base_ot3, fetched from the Hub when not on
+# this node) from Qwen3-8B in thinking mode, Thinking Machines' recipe. See README.md in this folder. From ~/SkyRL:
+#   bash skyrl-test/opd-blog-v2/common/job.sh opd_1b_ot3sft8b_from_qwen3_8b    # as orchestrate.sh runs it
+#   bash skyrl-test/opd-blog-v2/1-tml/opd.sh --smoke                            # 2 tiny steps, before 1a exists
+# Anything else on the command line is passed to SkyRL as an extra override. Preempted? Run it again; it resumes.
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
-variant="${1:?variant: 1b or 1c}"; shift
-case "$variant" in
-  1b) v2_init opd_1b_ot3sft8b_from_qwen3_8b "$@" ;;
-  1c) v2_init opd_1c_qwen3_8b_base_from_qwen3_8b "$@" ;;
-  *) echo "unknown variant: $variant (1b or 1c)" >&2; exit 2 ;;
-esac
+v2_init opd_1b_ot3sft8b_from_qwen3_8b "$@"
 
 # ================================== HYPERPARAMETERS ==================================
 # README.md in this folder has the same table. Thinking Machines' cookbook at 330b73d8d7 (2025-10-27, the blog's
@@ -45,7 +38,7 @@ TOP_K=-1                           # [tinker]
 KL_COEF=1.0                        # [recipe] kl_penalty_coef=1.0, kl_discount_factor=0.0; [kl] student - teacher log-prob
 LOSS=importance_sampling           # [recipe] loss_fn="importance_sampling", num_substeps=1: one update a step
 LOSS_REDUCTION=token_mean          # Tinker sums the loss over tokens: the same, up to a constant per step
-# ---- the in-training eval: this kit's, with the Qwen settings section 1's final evals use ----
+# ---- the in-training eval: this kit's, with the Qwen settings 1b's final eval uses ----
 EVAL_EVERY=5                       # every 5 steps, and before the first
 EVAL_N=8                           # samples per AIME problem; 0-evals/ does the 64-sample evals
 EVAL_RESP=32768                    # [qwen3] (the final evals give AIME 38,912)
@@ -58,13 +51,15 @@ TEACHER_ENGINES=4                  # 1 GPU each
 MICRO=2                            # sequences per GPU per micro-batch
 # =====================================================================================
 
-case "$variant" in
-  1b) STUDENT="$(v2_model kit:sft_1a_qwen3_8b_base_ot3)" ;;
-  1c) STUDENT="$(v2_chat_base "$QWEN3_8B_BASE" "$QWEN3_8B" qwen3_8b_base_chat)" ;;
-esac
+if [[ $SMOKE == 1 ]]; then
+  # The smoke test checks the plumbing before 1a has finished: the Base model with fixed settings stands in for 1a.
+  STUDENT="$(v2_fix_base "$QWEN3_8B_BASE" "$QWEN3_8B" qwen3_8b_base_fixed)"
+else
+  STUDENT="$(v2_model kit:sft_1a_qwen3_8b_base_ot3)"
+fi
 v2_collect < <(
   v2_opd_recipe
   v2_teacher "$TEACHER" "$TEACHER_ENGINES" 1
-  v2_bookkeeping "['opd','section1','$variant','deepmath','teacher:Qwen3-8B']"
+  v2_bookkeeping "['opd','section1','1b','deepmath','teacher:Qwen3-8B']"
 )
 v2_launch opd

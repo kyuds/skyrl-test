@@ -1,6 +1,6 @@
 # Section 3: MOPD, one student from three experts
 
-One run, `mopd_3_m2rl_sft_from_math_code_if`, on `h100-5` in stage 2, then `eval_mopd_3_final` on every benchmark.
+One run, `mopd_3_m2rl_sft_from_math_code_if`, on `h100-4` in stage 2, then `eval_mopd_3_final` on every benchmark.
 The student is M2RL-SFT, distilled from three M2RL experts at once, each row scored by the expert of its domain
 (the row's `skyrl_mopd_domain` label). No teacher is trained here: the experts are M2RL's own, and `../0-evals`
 checks them against their published numbers first.
@@ -25,7 +25,7 @@ the same block as section 2's.
 | Teachers | RL_Math, RL_Coding, RL_IF, each row routed to its domain's | [paper] (five teachers: these three plus science and agent); [route] |
 | Prompts | 57,800: math 22,056, code 19,169, IF 16,575 | [paper] section 3.2: the multi-task RLVR prompts; the proposal keeps three domains |
 | Batch | 256 prompts × 4 samples, one update per step | [paper] appendix A; [script] |
-| Steps | 300 | [paper]. [script] says `--num-rollout 400`; the paper's number is kept |
+| Steps | 400 | [script] `--num-rollout 400`. The paper's appendix A says 300; the code's number is used |
 | Learning rate | 1e-6, constant, no warmup | [paper]; [script] `--lr 1e-6 --lr-decay-style constant` |
 | Optimizer | Adam, betas 0.9 and 0.98, weight decay 0.1 | [script] |
 | Grad clip | 1.0 | [slime] `--clip-grad` default |
@@ -51,7 +51,7 @@ Each expert's own score in its domain (M2RL Table 3), from M2RL-SFT's:
 | IFEval / IFBench | 79.48 / 38.44 | RL_IF 90.94 / 59.52 | 93.90 / 59.18 |
 
 Success is recovering most of each expert's gain over M2RL-SFT in its own domain. The paper's MT-OPD row used five
-teachers (with science and agent), so it is not matched exactly here.
+teachers (with science and agent), and the paper says 300 steps against 400 here, so it is not matched exactly.
 
 ## Run by hand
 

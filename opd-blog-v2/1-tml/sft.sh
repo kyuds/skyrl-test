@@ -18,7 +18,7 @@ v2_init sft_1a_qwen3_8b_base_ot3 "$@"
 #   [train]   https://github.com/thinking-machines-lab/tinker-cookbook/blob/330b73d8d763b0f65bcf04e643cc6f082e002554/tinker_cookbook/supervised/train.py#L49-L69
 #   [sched]   https://github.com/thinking-machines-lab/tinker-cookbook/blob/330b73d8d763b0f65bcf04e643cc6f082e002554/tinker_cookbook/utils/lr_scheduling.py#L11
 #   [tinker]  https://github.com/thinking-machines-lab/tinker/blob/2c9f564c9f7d9236a0659da89781c09c6509b950/src/tinker/types/optim_step_request.py#L11-L21
-SFT_BASE="$QWEN3_8B_BASE"          # [blog] the student; [recipe] model_name="Qwen/Qwen3-8B-Base"
+BASE_MODEL="$QWEN3_8B_BASE"        # [blog] the student; [recipe] model_name="Qwen/Qwen3-8B-Base"
 OT3_DOMAINS=""                     # [recipe] streams every domain (math, code, science); "" keeps all, "math" only math
 OT3_ROWS=384000                    # [recipe] max_prompts = 128 * 3000
 SFT_MAX_LEN=16384                  # [recipe] max_length=16384; longer rows are cut
@@ -32,13 +32,15 @@ SFT_WEIGHT_DECAY=0                 # [tinker] AdamParams has no weight decay
 SFT_GRAD_CLIP=1.0                  # not in [tinker]'s API, so unknown; kept as a guard (README.md, "Differences")
 # Loss on the answer tokens, summed ([recipe] TrainOnWhat.ALL_ASSISTANT_MESSAGES; SkyRL's SFT loss is the same sum).
 # ---- infrastructure, not hyperparameters ----
-SFT_TOKENIZER_FROM="$QWEN3_8B"     # the output stops at <|im_end|> and renders prompts like the teacher
 SFT_MICRO=2                        # rows per GPU per micro-batch, packed
 SFT_CKPT_EVERY=250
 SFT_HF_EVERY=1000                  # exports at 1000, 2000 and 3000: the SFT curve, not only its end
 SFT_TAGS="['sft','section1','1a','openthoughts3','Qwen3-8B-Base']"
 # =====================================================================================
 
+# The SFT starts from Qwen3-8B-Base with Qwen3-8B's settings files: tokenizer, end tokens, 40,960 context
+# (common/fix_base_settings.py says why). SkyRL's export keeps those files, so 1a's output ends its turns at <|im_end|>.
+SFT_BASE="$(v2_fix_base "$BASE_MODEL" "$QWEN3_8B" qwen3_8b_base_fixed)"
 SFT_DATA="$V2_DATA/sft_ot3_${OT3_DOMAINS:-all}_${OT3_ROWS}"
 SFT_DATA="${SFT_DATA//,/_}"
 if [[ $SMOKE == 1 ]]; then SFT_DATA="$V2_DATA/sft_ot3_smoke"; fi

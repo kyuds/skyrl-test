@@ -154,7 +154,7 @@ def kit_entrypoint(mode: str, cfg) -> None:
 
 
 def build_config(mode: str, overrides: List[str]):
-    """The validated config for ``mode``, exactly as the run would build it. common/check_configs.py uses this too."""
+    """The validated config for ``mode``, exactly as the run would build it. check_configs.py uses this too."""
     from skyrl.train.utils import validate_cfg
 
     register_envs()

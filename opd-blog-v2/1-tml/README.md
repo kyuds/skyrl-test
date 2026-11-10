@@ -1,16 +1,14 @@
 # Section 1: on-policy distillation as Thinking Machines ran it
 
 Thinking Machines' [post][blog] SFTs Qwen3-8B-Base on 400k OpenThoughts-3 prompts (60% on AIME 2024), then distills it
-from Qwen3-8B in about 150 steps (70%). This section recreates that, and adds the same distillation on the Base model
-with no SFT, to show why the SFT comes first.
+from Qwen3-8B in about 150 steps (70%). This section recreates both steps.
 
 | Job | Stage | Node | What | Target |
 |---|---|---|---|---|
 | `sft_1a_qwen3_8b_base_ot3` | 1 | b200-1 | 1a: SFT of Qwen3-8B-Base on 384k OpenThoughts-3 rows | 60% AIME 2024 |
-| `eval_sft_1a` | 3 | h100-6 | 1a at 64 samples (`../0-evals`) | 60% |
+| `eval_sft_1a` | 3 | b200-1 | 1a at 64 samples (`../0-evals`), before 1b | 60% |
 | `opd_1b_ot3sft8b_from_qwen3_8b` | 3 | b200-1 | 1b: OPD of 1a from Qwen3-8B | 70% |
-| `opd_1c_qwen3_8b_base_from_qwen3_8b` | 2 | h100-1 | 1c: the same OPD on Qwen3-8B-Base itself | below 1b |
-| `eval_opd_1b_final`, `eval_opd_1c_final` | | | their last exports at 64 samples | |
+| `eval_opd_1b_final` | 3 | b200-1 | 1b's last export at 64 samples | 70% |
 
 The teacher is Qwen3-8B in thinking mode. The post presents Qwen3-32B, but says it actually used Qwen3-8B because it
 performed slightly better.
@@ -41,21 +39,28 @@ Script: [`sft.sh`](sft.sh), block `HYPERPARAMETERS`. SkyRL's SFT trainer, FSDP, 
 | Loss | summed over the answer tokens | [recipe] `TrainOnWhat.ALL_ASSISTANT_MESSAGES`; Tinker's `cross_entropy` is a sum, as SkyRL's |
 | Prompt format | Qwen3's chat template; the answer starts `<think>\n` | [recipe] `renderer_name="qwen3"` |
 
+**The starting model.** Qwen3-8B-Base is packaged as a text completer: its files end a sequence at `<|endoftext|>`
+only and allow 32,768 tokens of context. 1a's answers, like its teacher's, end at `<|im_end|>`, and the evals need
+more than 32,768 tokens. So before training, `../common/fix_base_settings.py` gives the Base weights Qwen3-8B's tokenizer, end
+tokens and 40,960-token context; the post-trained model's files differ from the Base model's in exactly those, and its
+chat template renders prompts the same way. SkyRL's export keeps the starting model's files, so 1a's output inherits
+the fix; the job checks that before it uploads. Thinking Machines needed none of this: their sampler is told to stop
+at `<|im_end|>`, and their evals are not limited by the model's config.
+
 Infrastructure: micro-batch 2 rows per GPU (packed), checkpoints every 250 steps (the last kept), exports at 1000,
-2000 and 3000 steps. The finished model is the last export with Qwen3-8B's tokenizer files
-(`../common/chat_model.py`), so it ends its turn at `<|im_end|>` and has Qwen3-8B's 40,960-token context. It goes to
-the Hub as `kyuds/opd-blog-v2/sft_1a_qwen3_8b_base_ot3`, where other nodes fetch it.
+2000 and 3000 steps. The last export goes to the Hub as `kyuds/opd-blog-v2/sft_1a_qwen3_8b_base_ot3`, where other
+nodes fetch it.
 
 The data is described in `../data/README.md`, including the unfinished answers OpenThoughts-3 keeps (62% to 68% of
 one code and one math shard, 12% of one science shard).
 
-## 1b and 1c: OPD
+## 1b: OPD
 
 Script: [`opd.sh`](opd.sh), block `HYPERPARAMETERS`.
 
 | Setting | Value | Source |
 |---|---|---|
-| Student | 1b: 1a's output. 1c: Qwen3-8B-Base with Qwen3-8B's tokenizer and config | [c58e] README: OPD starts from the SFT checkpoint |
+| Student | 1a's output | [c58e] README: OPD starts from the SFT checkpoint |
 | Teacher | `Qwen/Qwen3-8B`, thinking, 4 engines × 1 GPU | [blog]; [opd] `teacher_model` |
 | Prompts | DeepMath-103K, the `question` column alone, cut at 1,024 tokens | [opd] `dataset="deepmath"`; [data] `row["question"]`, `max_prompt_tokens=1024` |
 | Batch | 512 prompts × 4 samples, one update a step | [readme-opd] `groups_per_batch=512`; [opd] `group_size=4`, `num_substeps=1`; [blog] 150 steps is about 77K prompts |
@@ -78,31 +83,30 @@ checkpoints every 10 steps (the last 2 kept), exports every 50, and the last exp
 The orchestrator runs these (`../README.md`). By hand on a node, from `~/SkyRL`, through the job runner:
 
 ```bash
-nohup bash skyrl-test/opd-blog-v2/common/job.sh opd_1c_qwen3_8b_base_from_qwen3_8b > /dev/null 2>&1 < /dev/null &
+nohup bash skyrl-test/opd-blog-v2/common/job.sh opd_1b_ot3sft8b_from_qwen3_8b > /dev/null 2>&1 < /dev/null &
 ```
 
 ```bash
-tail -f ~/opd-store/logs/opd_1c_qwen3_8b_base_from_qwen3_8b.log
+tail -f ~/opd-store/logs/opd_1b_ot3sft8b_from_qwen3_8b.log
 ```
 
-Smoke tests (2 tiny steps; nothing uploaded):
+Smoke tests (2 tiny steps; nothing uploaded). The OPD one runs before 1a exists, with the Base model (settings fixed) as
+its student:
 
 ```bash
 bash skyrl-test/opd-blog-v2/1-tml/sft.sh --smoke
 ```
 
 ```bash
-bash skyrl-test/opd-blog-v2/1-tml/opd.sh 1c --smoke
+bash skyrl-test/opd-blog-v2/1-tml/opd.sh --smoke
 ```
 
 ## What to watch
 
 - **1a:** `train/loss` on W&B project `opd-blog-v2`. Thinking Machines saw AIME rise log-linearly with SFT prompts, so
   the exports at 1000 and 2000 steps should score well below 60%, and 3000 near it.
-- **1b, 1c:** `eval/aime-2024/avg_score` (the target), `opd/teacher/_/reverse_kl` (should fall), `opd/truncation_rate`
+- **1b:** `eval/aime-2024/avg_score` (the target), `opd/teacher/_/reverse_kl` (should fall), `opd/truncation_rate`
   (most rollouts hit 4,096 tokens at first; that is expected here) and `opd/repetition_rate`.
-- **1c against 1b:** the claim is that 1c learns far less, or slower, from the same teacher. If 1c matches 1b, that is
-  a finding too.
 
 ## Differences from Thinking Machines
 
