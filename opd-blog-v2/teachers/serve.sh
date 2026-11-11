@@ -42,6 +42,13 @@ have="$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)"
 echo "=== $RUN: $keys on $gpus of $have GPUs  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '  %s\n' "${OVERRIDES[@]}"
 cd "$SKYRL_DIR"
+# Download first. SkyRL gives a server 600 s to answer /health, and on a fresh node (or after a preemption, which
+# wipes the NVMe cache) Qwen3-32B's 64 GB download alone takes longer: it failed that way on 2026-11-11.
+for key in $keys; do
+  model="$(v2_teacher_field "$key" 4)"
+  echo "downloading $model (nothing to do if it is in the cache)"
+  uv run --isolated --extra fsdp hf download "$model" > /dev/null
+done
 # As v2_launch: no HF token in the process (every teacher is public), Ray ships this directory to its workers.
 exec env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp \
   python "$V2_KIT/teachers/serve.py" "${PORTS[@]}" --status-file "$OPD_STORE/teachers/$RUN.status" -- "${OVERRIDES[@]}"
