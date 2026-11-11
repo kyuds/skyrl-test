@@ -17,7 +17,7 @@ fi
 
 # ---- what 01_create_nodes.sh asks for ----
 # The most nodes of each kind. Each node has a fixed name, so these are hard caps. 0 turns a kind off.
-GCP_H100_NODES="${GCP_H100_NODES:-4}"
+GCP_H100_NODES="${GCP_H100_NODES:-6}"   # 4 for the H100 runs, 2 that serve their teachers (h100-5, h100-6)
 GCP_B200_NODES="${GCP_B200_NODES:-2}"
 GCP_H100_MACHINE_TYPE="${GCP_H100_MACHINE_TYPE:-a3-highgpu-8g}"
 GCP_B200_MACHINE_TYPE="${GCP_B200_MACHINE_TYPE:-a4-highgpu-8g}"
@@ -84,6 +84,11 @@ gcloud_read() {
 nodes_rows() {
   gcloud_read compute instances list --project "$GCP_PROJECT" --filter="name~'$(node_regex)'" \
     --format='value(name,zone.basename(),machineType.basename(),status)'
+}
+# Each node's internal IP as "<node> <ip>" lines, the node without the prefix (h100-5 10.140.0.30), for those that exist.
+nodes_ips() {
+  gcloud_read compute instances list --project "$GCP_PROJECT" --filter="name~'$(node_regex)'" \
+    --format='value(name,networkInterfaces[0].networkIP)' | sed "s/^$GCP_NODE_PREFIX-//"
 }
 # Every zone that offers the kind's machine type, or the list set above.
 kind_zones() {

@@ -7,6 +7,8 @@
 #   v2_opd_recipe             prints the OPD overrides from the run script's HYPERPARAMETERS block
 #   v2_tp_32b                 tensor parallelism for Qwen3-32B on this node's GPUs (2 on an H100, 1 on a B200)
 #   v2_teacher <model> <engines> <tp>    prints one teacher's overrides
+#   v2_remote_teacher <path> <key>       prints the overrides of a teacher served from another node (teachers/)
+#   v2_wait_teachers          waits until the served teachers in OVERRIDES answer (v2_launch calls it)
 #   v2_bookkeeping <tags>     prints the overrides every run shares: logging, checkpoints, exports, resume, eval
 #   v2_collect                reads overrides on stdin into OVERRIDES, adding --smoke's and the extra arguments
 #   v2_launch opd             runs common/kit_main.py with OVERRIDES, then uploads the run's last export
@@ -167,6 +169,52 @@ v2_teacher() {
     "trainer.teacher.max_concurrency=$((16 * engines))"
 }
 
+# A teacher served from another node (config.sh's V2_TEACHER_SERVERS, teachers/serve.sh), scored over the network.
+# $1 is its config path (trainer.teacher, or trainer.teachers.<name> under MOPD), $2 its key in V2_TEACHER_SERVERS.
+# Its address is its node's internal IP, from ~/opd-store/nodes.env (orchestrate.sh run writes it), and its port.
+# Requests in flight: 16 per engine, as v2_teacher; a scoring request waits up to 10 minutes (it queues behind the
+# other run sharing the server) and is retried 3 times before the run fails.
+v2_remote_teacher() {
+  local path="$1" key="$2" node port model engines ip var
+  node="$(v2_teacher_field "$key" 2)"; port="$(v2_teacher_field "$key" 3)"
+  model="$(v2_teacher_field "$key" 4)"; engines="$(v2_teacher_field "$key" 5)"
+  [[ -n "$node" && -n "$model" ]] || { echo "no teacher $key in config.sh's V2_TEACHER_SERVERS" >&2; return 1; }
+  if (( MAX_PROMPT + MAX_RESP + 1 > V2_TEACHER_MAX_LEN )); then
+    echo "the served teachers score up to $V2_TEACHER_MAX_LEN tokens (V2_TEACHER_MAX_LEN), below this run's prompt + answer" >&2
+    return 1
+  fi
+  if [[ $V2_DRY_RUN == 1 ]]; then
+    ip=10.0.0.1
+  else
+    var="V2_NODE_IP_${node//-/_}"
+    if [[ -f "$OPD_STORE/nodes.env" ]]; then source "$OPD_STORE/nodes.env"; fi
+    ip="${!var:-}"
+    [[ -n "$ip" ]] || { echo "no address for $node in $OPD_STORE/nodes.env: orchestrate.sh run writes it" >&2; return 1; }
+  fi
+  printf '%s\n' \
+    "$path.backend=vllm" \
+    "$path.model=$model" \
+    "$path.server_url=http://$ip:$port" \
+    "$path.max_concurrency=$((16 * engines))" \
+    "$path.request_timeout_s=600"
+}
+
+# Waits until every served teacher in OVERRIDES answers /health, for up to 6 hours: a run and its teacher's server
+# start together, and the server takes minutes to load (Qwen3-32B the longest).
+v2_wait_teachers() {
+  local o url waited
+  for o in "${OVERRIDES[@]}"; do
+    [[ "$o" == *.server_url=* ]] || continue
+    url="${o#*=}"; waited=0
+    until curl -sf -m 10 "$url/health" > /dev/null; do
+      if [[ $((waited % 600)) == 0 ]]; then echo "waiting for the teacher at $url (${waited}s so far)"; fi
+      if [[ $waited -ge 21600 ]]; then echo "the teacher at $url did not answer for 6 hours" >&2; return 1; fi
+      sleep 30; waited=$((waited + 30))
+    done
+    echo "the teacher at $url answers"
+  done
+}
+
 # Logging, checkpoints, exports and resume: the same for every run. A checkpoint every 10 steps (the last 2 kept)
 # bounds what a preemption costs; an HF export every 50 steps keeps a usable model near any eval.
 v2_bookkeeping() {
@@ -230,6 +278,7 @@ v2_launch() {
   fi
   if [[ $SMOKE == 1 ]]; then rm -rf "${CKPT_ROOT:?}/$RUN" "${EXPORT_ROOT:?}/$RUN"; fi
   bash "$V2_KIT/data/prepare.sh"
+  v2_wait_teachers
   echo "=== run=$RUN  project=$PROJECT  mode=$mode  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '  %s\n' "${OVERRIDES[@]}"
   # HF_TOKEN is kept out of the training process: SkyRL logs the value of what it copies into the Ray runtime env, and

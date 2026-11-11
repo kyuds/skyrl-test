@@ -24,6 +24,52 @@ Later stages: `eval_sft_1a` on b200-1 before 1b (target: Thinking Machines' 60% 
 error near 1 point, so 3 points is a real difference. A model that misses is not used until the gap is understood:
 first check the cut rate (answers that hit the length limit) and the grader, then the settings below.
 
+## Measured, 2026-11-10
+
+Stage 1, SkyRL `988d977f`. Cut is the share of answers that hit the length limit.
+
+| Model | Benchmark | Measured | Published | Difference | Cut |
+|---|---|---|---|---|---|
+| Qwen3-8B | AIME 2024 | 76.46 | 76.0 | +0.5 | 1.7% |
+| | AIME 2025 | 68.59 | 67.3 | +1.3 | 4.8% |
+| Qwen3-32B | AIME 2024 | 80.68 | 81.4 | −0.7 | 1.3% |
+| | AIME 2025 | 72.24 | 72.9 | −0.7 | 4.0% |
+| M2RL-SFT | AIME 2024 | 56.51 | 56.04 | +0.5 | 16.2% |
+| | AIME 2025 | 43.54 | 51.30 | **−7.8, miss** | 20.6% |
+| | LiveCodeBench v5 | 57.52 | 55.92 | +1.6 | 22.2% |
+| | LiveCodeBench v6 | 48.85 | 52.00 | −3.2, within noise | 29.8% |
+| | IFEval | 78.0 | 79.48 | −1.5 | 4.8% |
+| | IFBench | 45.0 | 38.44 | **+6.6, miss (high)** | 7.7% |
+| M2RL-RL_Math | AIME 2024 | 82.29 | 77.66 | **+4.6, miss (high)** | 7.0% |
+| | AIME 2025 | 75.83 | 70.42 | **+5.4, miss (high)** | 13.8% |
+| M2RL-RL_Coding | LiveCodeBench v5 | 61.7 | 65.00 | −3.3, borderline | 9.8% |
+| | LiveCodeBench v6 | 54.96 | 58.86 | −3.9, within noise | 12.2% |
+| M2RL-RL_IF | IFEval | 91.54 | 90.94 | +0.6 | 3.8% |
+| | IFBench | 68.33 | 59.52 | **+8.8, miss (high)** | 7.3% |
+
+Sampling noise, as a binomial upper bound on the standard error: about 1 point for AIME (30 × 64) and LiveCodeBench
+v5 (311 × 8), 4.4 for v6 (131 × 1), 2.9 for IFBench (300 × 1). So v6's −3.2 and −3.9 are within one standard error.
+
+What the misses are:
+
+- **The harness is not the cause** (verified). Both Qwen models land within 1.3 points on both years, with the same
+  AIME files, grader and `generate.py` the M2RL models use.
+- **M2RL-SFT on AIME 2025** (cause verified, the paper's number not explained). 21.4% of its AIME 2025 answers and
+  13.2% of its 2024 answers are a bare Python tool call: `<tool_call>`, then the turn ends, and the answer scores 0.
+  No other model here does it, RL_Math included (0%). It is this checkpoint's own behaviour (Nemotron 3 Nano's SFT
+  data has tool use; ASSUMED as the origin). The AIME 2025 file is not harder than the paper's: RL_Math scores 5
+  points above the paper on it. M2RL scoring only one half of AIME 2025 does not explain it either: problems 0–14
+  are AIME 2025 I and 15–29 are II (checked), and M2RL-SFT's halves (37.3, 49.8) and RL_Math's (70.3, 81.4) do not
+  both line up with the paper on the same half.
+- **RL_Math, about 5 points high on both years** (not explained). Suspects, unverified: the Hub checkpoint is not
+  the one in Table 3 (the paper says 300 steps, the script runs 400), or the assumed top-p of 0.95.
+- **IFBench, high for both models while IFEval matches** (ASSUMED: a grading difference). M2RL grades with
+  open-instruct's IFEvalG; this kit uses IFBench's own checker. The offset is similar for both models.
+- **RL_Coding on v5, −3.3**: just past the pass mark; not chased.
+
+None of this changes what sections 2 and 3 compare: every comparison there is against the measured numbers above,
+on this harness, not the published ones. Stage 2 started on 2026-11-10 on that basis.
+
 ## Settings
 
 Script: [`run.sh`](run.sh), block `HYPERPARAMETERS`; the samples per problem are `BENCH_SAMPLES` in
@@ -114,8 +160,8 @@ fails; LiveCodeBench passes a correct stdin program and a correct `class Solutio
 and an unfinished answer; the IF checker runs every IFEval and IFBench instruction without error and gives the same
 score twice.
 
-Not verified: `generate.py`, which needs GPUs and vLLM; the v5 window's count; and every published number, which is
-what these jobs are for.
+Verified on 2026-11-10, on the nodes: `generate.py` ran every stage-1 job; the v5 window has 311 problems; the
+published numbers, as measured above.
 
 [qwen3]: https://arxiv.org/abs/2505.09388
 [m2rl]: https://arxiv.org/abs/2602.12566

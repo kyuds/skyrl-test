@@ -58,24 +58,29 @@ EVAL_TEMPERATURE=0.6               # same
 EVAL_TOP_P=0.95                    # ASSUMED (0-evals/README.md)
 EVAL_TOP_K=-1                      # none given
 # ---- infrastructure, not hyperparameters ----
-STUDENT_GPUS=4                     # the other 4 GPUs run the teacher
+STUDENT_GPUS=8                     # the whole node: 2a, 2b and 2d score with a teacher served from a node of its
+                                   # own (../teachers/). 2c, on b200-2, keeps its teacher on 4 of its GPUs (below)
 MICRO=1                            # sequences per GPU per micro-batch
 # =====================================================================================
 
 STUDENT="$M2RL_SFT"
-if [[ $variant == 2c ]]; then STUDENT="$(v2_model kit:sft_2c_m2rl_sft_warmup)"; fi
-if [[ $variant == 2a ]]; then
-  TEACHER="$M2RL_MATH"; TEACHER_TP=1
-else
-  TEACHER="$QWEN3_32B"; TEACHER_TP="$(v2_tp_32b)"   # 2 GPUs per engine on an H100, 1 on a B200
-fi
-TEACHER_ENGINES=$((4 / TEACHER_TP))
+case "$variant" in
+  2a) TEACHER="$M2RL_MATH"; SERVED=rl_math ;;     # served from h100-6 (config.sh, V2_TEACHER_SERVERS)
+  2b|2d) TEACHER="$QWEN3_32B"; SERVED=qwen3_32b ;; # served from h100-5, shared by 2b and 2d
+  2c) TEACHER="$QWEN3_32B"; SERVED=""             # on this node: b200-2's other 4 GPUs, 1 per engine on a B200
+      STUDENT="$(v2_model kit:sft_2c_m2rl_sft_warmup)"; STUDENT_GPUS=4 ;;
+esac
 EXTRA_OPD=()
 if [[ $variant == 2d ]]; then EXTRA_OPD+=("trainer.algorithm.opd.advantage_clip_min=$CLIP_MIN"); fi
 
 v2_collect < <(
   v2_opd_recipe
-  v2_teacher "$TEACHER" "$TEACHER_ENGINES" "$TEACHER_TP"
+  if [[ -n "$SERVED" ]]; then
+    v2_remote_teacher trainer.teacher "$SERVED"
+  else
+    TEACHER_TP="$(v2_tp_32b)"
+    v2_teacher "$TEACHER" $(((8 - STUDENT_GPUS) / TEACHER_TP)) "$TEACHER_TP"
+  fi
   v2_bookkeeping "['opd','section2','$variant','nemotron3-nano-rl-math','teacher:${TEACHER#*/}']"
   printf '%s\n' ${EXTRA_OPD[@]+"${EXTRA_OPD[@]}"}
 )

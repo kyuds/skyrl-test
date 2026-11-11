@@ -41,7 +41,35 @@ def check_sft(overrides):
     return summary, problems
 
 
-def check(kit_main, path):
+def check_serve(kit_dir, head, overrides):
+    """A teacher node's servers (teachers/serve.sh): built and checked as teachers/serve.py builds them."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("serve", os.path.join(kit_dir, "teachers", "serve.py"))
+    serve = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(serve)
+    _, ports = serve.parse_args(head.split()[1:] + ["--status-file", "/dev/null"])
+    cfg = serve.build_config(overrides)
+    problems = []
+    if set(ports) != set(cfg.trainer.teachers):
+        problems.append(f"ports for {sorted(ports)}, teachers {sorted(cfg.trainer.teachers)}")
+    gpus = 0
+    lines = []
+    for name, teacher in cfg.trainer.teachers.items():
+        ie = teacher.inference_engine
+        gpus += ie.num_engines * ie.tensor_parallel_size
+        lines.append(
+            f"{name}={teacher.model} on {ie.num_engines} x {ie.tensor_parallel_size} GPU(s), port {ports.get(name)}, "
+            f"max_model_len {ie.engine_init_kwargs.get('max_model_len')}"
+        )
+    if gpus > NUM_GPUS:
+        problems.append(f"needs {gpus} GPUs, the node has {NUM_GPUS}")
+    if len(set(ports.values())) != len(ports):
+        problems.append("two teachers share a port")
+    return "serve " + "\n      ".join(lines), problems
+
+
+def check(kit_main, path, kit_dir):
     with open(path) as f:
         lines = [line.rstrip("\n") for line in f if line.strip()]
     mode, overrides = lines[0], lines[1:]
@@ -49,6 +77,8 @@ def check(kit_main, path):
         return mode, []
     if mode == "sft":
         return check_sft(overrides)
+    if mode.split()[0] == "serve":
+        return check_serve(kit_dir, mode, overrides)
     cfg = kit_main.build_config(mode, overrides)
     t, g = cfg.trainer, cfg.generator
     problems = []
@@ -60,6 +90,9 @@ def check(kit_main, path):
     teachers = {}
     if mode == "opd":
         for name, teacher in t.teachers.items():
+            if teacher.backend == "vllm":  # served from another node (teachers/); its length is checked by run_lib.sh
+                teachers[name] = (f"{teacher.model} at {teacher.server_url}", 0)
+                continue
             ie = teacher.inference_engine
             gpus = ie.num_engines * ie.tensor_parallel_size * ie.pipeline_parallel_size * ie.data_parallel_size
             teacher_gpus += gpus
@@ -81,7 +114,7 @@ def check(kit_main, path):
     summary = (
         f"{mode:4} {t.run_name}\n"
         f"     student {t.policy.model.path}  on {student} GPUs; "
-        + (", ".join(f"teacher {n}={m} on {k}" for n, (m, k) in teachers.items()) or "no teacher")
+        + (", ".join(f"teacher {n}={m}" + (f" on {k}" if k else "") for n, (m, k) in teachers.items()) or "no teacher")
         + f"\n     {t.train_batch_size} prompts x {g.n_samples_per_prompt}, {updates} optimizer step(s) per step, "
         f"{t.max_training_steps} steps, lr {t.policy.optimizer_config.lr:g}, warmup "
         f"{t.policy.optimizer_config.num_warmup_steps}, betas {list(t.policy.optimizer_config.adam_betas)}, wd "
@@ -107,7 +140,7 @@ def main():
     failed = 0
     for path in paths:
         try:
-            summary, problems = check(kit_main, path)
+            summary, problems = check(kit_main, path, kit_dir)
         except (Exception, SystemExit) as e:  # a config SkyRL refuses
             failed += 1
             print(f"FAIL {os.path.basename(path)}: {type(e).__name__}: {e}\n")

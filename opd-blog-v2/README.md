@@ -1,7 +1,7 @@
 # OPD blog v2
 
 The experiments behind the OPD blog post, as planned on 2026-11-10 with Charlie Ruan. Everything runs on GCP spot
-nodes (2 B200 and 4 H100, 8 GPUs each) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
+nodes (2 B200 and 6 H100, 8 GPUs each; two of the H100s only serve teachers) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
 W&B project `opd-blog-v2` (evals in `opd-blog-v2-evals`), Hub repo `kyuds/opd-blog-v2`.
 
 **Every hyperparameter is in a `HYPERPARAMETERS` block at the top of its run script, each value with the source it
@@ -44,7 +44,8 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 
 ## The plan
 
-Six nodes: 2 B200 and 4 H100, 8 GPUs each, the six from the earlier smoke tests. Three stages, each started by hand
+Eight nodes: 2 B200 and 6 H100, 8 GPUs each. h100-5 and h100-6, added on 2026-11-11, only serve teachers to the OPD
+runs on h100-1 to h100-4, whose students take all 8 GPUs of their nodes ([`teachers/`](teachers/README.md)). Three stages, each started by hand
 with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and
 1a's SFT keeps running through stage 2.
 
@@ -56,6 +57,8 @@ with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only
 | h100-2 | eval: M2RL-RL_Math on AIME | `opd_2a` (RL_Math), its eval | |
 | h100-3 | eval: Qwen3-8B on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | |
 | h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `mopd_3`, then all six benchmarks | |
+| h100-5 | | serves Qwen3-32B to 2b and 2d | |
+| h100-6 | | serves RL_Math to 2a and MOPD, RL_Coding and RL_IF to MOPD | |
 
 What each OPD run waits for:
 
@@ -65,6 +68,8 @@ What each OPD run waits for:
 | 2a | h100-2 | RL_Math's eval and M2RL-SFT's |
 | 2c | b200-2 | its warm-up, which waits for Qwen3-32B's answers; and the same two evals as 2b |
 | MOPD | h100-4 | all five M2RL evals |
+
+The runs on h100-1 to h100-4 also wait, at launch, until their teacher's server answers.
 | 1b | b200-1 | 1a's SFT (and its eval, run first on the same node) and Qwen3-8B's eval (h100-3) |
 
 Why this layout:
@@ -85,7 +90,9 @@ Why this layout:
 **Rough timeline** (none of it measured): stage 1's evals take one to a few hours each, so stage 2 can start a few
 hours in (MOPD several hours in); Qwen3-32B's answers take several hours on b200-2; 1a about a day (5 billion tokens,
 estimated at 35% GPU use); each OPD run 1 to 2 days, the Qwen3-32B-teacher runs on H100s probably the longest. End to
-end, 3 to 4 days, set by 1a then 1b or by 2b and 2d. The in-training AIME eval runs every 5 steps at 8 samples: about
+end, 3 to 4 days, set by 1a then 1b or by 2b and 2d. Measured on 2026-11-11, the first launch of stage 2 (4 student
+GPUs, teacher on the same node) ran about 35 minutes a step with the eval, 9 to 10 days for 400 steps; the runs
+restarted with 8 student GPUs and served teachers, expected to roughly halve that (`teachers/README.md`). The in-training AIME eval runs every 5 steps at 8 samples: about
 10 to 15 minutes each on 4 H100s, roughly 16 hours over a 400-step run (estimated from vLLM's KV-cache limits, not
 measured). `EVAL_EVERY` and `EVAL_N` in each run script change it.
 

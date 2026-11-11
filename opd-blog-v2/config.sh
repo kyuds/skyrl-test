@@ -25,6 +25,25 @@ M2RL_MATH=Jackwang111/M2RL-RL_Math # section 2's aligned teacher (RL'd from M2RL
 M2RL_CODE=Jackwang111/M2RL-RL_Coding
 M2RL_IF=Jackwang111/M2RL-RL_IF
 
+# ---- teacher servers (teachers/README.md) ----
+# The OPD runs on the H100s (2a, 2b, 2d, MOPD) score with teachers served from two nodes of their own, so each run's
+# student has all 8 GPUs of its node. Each line is one served model: SkyRL's own teacher launch (vLLM servers plus a
+# router) kept up by the job serve_teachers_<node>, reached by the runs at http://<node's internal IP>:<port>.
+#   <key> <node> <router port> <model> <engines> <GPUs per engine>
+# Qwen3-32B takes a whole node, as 2b and 2d share it; RL_Math serves 2a and MOPD's math rows. 2c runs on b200-2
+# with its own teacher on 4 of its GPUs.
+V2_TEACHER_SERVERS="${V2_TEACHER_SERVERS:-
+qwen3_32b  h100-5  31000  $QWEN3_32B  4  2
+rl_math    h100-6  31001  $M2RL_MATH  4  1
+rl_coding  h100-6  31002  $M2RL_CODE  2  1
+rl_if      h100-6  31003  $M2RL_IF    2  1
+}"
+# The longest sequence a served teacher scores: a 2,048-token prompt and a 16,384-token answer, sections 2 and 3's
+# lengths, plus one. A run with longer ones is refused (common/run_lib.sh, v2_remote_teacher).
+V2_TEACHER_MAX_LEN=18433
+# One field of a served model's line: 2 node, 3 port, 4 model, 5 engines, 6 GPUs per engine.
+v2_teacher_field() { echo "$V2_TEACHER_SERVERS" | awk -v k="$1" -v c="$2" '$1 == k {print $c; exit}'; }
+
 # ---- the jobs ----
 # One line per job: <stage> <node> <job> <deps> <command, relative to opd-blog-v2/, with its arguments>.
 #   stage    orchestrate.sh run <stage> starts the stage's jobs. Stages are the README's plan, not barriers: a job
@@ -34,7 +53,8 @@ M2RL_IF=Jackwang111/M2RL-RL_IF
 #   deps     jobs that must be done first, comma-separated, or -. Checked on every node, so a dep can run elsewhere:
 #            SFT outputs go through the Hub, which is how an eval on an H100 finds a model trained on a B200.
 # common/job.sh runs a job by name and records it in ~/opd-store/jobs/; a job that is done is never run again.
-# Every OPD run waits for its teacher's eval and its student's (README.md, "The plan").
+# Every OPD run waits for its teacher's eval and its student's (README.md, "The plan"). A serve_teachers_* job never
+# ends: it serves until stopped. The runs that score against it wait, at launch, until it answers.
 V2_JOBS="${V2_JOBS:-
 1 b200-1 sft_1a_qwen3_8b_base_ot3             -                                       1-tml/sft.sh
 1 b200-2 eval_qwen3_32b_math                  -                                       0-evals/run.sh eval_qwen3_32b_math Qwen/Qwen3-32B qwen math
@@ -45,6 +65,8 @@ V2_JOBS="${V2_JOBS:-
 1 h100-4 eval_m2rl_sft_code_if                -                                       0-evals/run.sh eval_m2rl_sft_code_if Jackwang111/M2RL-SFT m2rl code,if
 1 h100-4 eval_m2rl_rl_coding_code             -                                       0-evals/run.sh eval_m2rl_rl_coding_code Jackwang111/M2RL-RL_Coding m2rl code
 1 h100-4 eval_m2rl_rl_if_if                   -                                       0-evals/run.sh eval_m2rl_rl_if_if Jackwang111/M2RL-RL_IF m2rl if
+2 h100-5 serve_teachers_h100_5                -                                       teachers/serve.sh h100-5
+2 h100-6 serve_teachers_h100_6                -                                       teachers/serve.sh h100-6
 2 b200-2 sft_2c_m2rl_sft_warmup               traces_2c_qwen3_32b                     2-alignment/sft_2c.sh
 2 b200-2 opd_2c_m2rl_warmup_from_qwen3_32b    sft_2c_m2rl_sft_warmup,eval_qwen3_32b_math,eval_m2rl_sft_math 2-alignment/opd.sh 2c
 2 b200-2 eval_opd_2c_final                    opd_2c_m2rl_warmup_from_qwen3_32b       0-evals/run.sh eval_opd_2c_final run:opd_2c_m2rl_warmup_from_qwen3_32b m2rl math

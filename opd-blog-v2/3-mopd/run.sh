@@ -47,26 +47,18 @@ EVAL_TEMPERATURE=0.6               # same
 EVAL_TOP_P=0.95                    # ASSUMED (0-evals/README.md)
 EVAL_TOP_K=-1                      # none given
 # ---- infrastructure, not hyperparameters ----
-STUDENT_GPUS=4                     # the other 4 GPUs run the teachers
+STUDENT_GPUS=8                     # the whole node: the teachers are served from h100-6 (../teachers/)
 MICRO=1
 # =====================================================================================
 
 STUDENT="$M2RL_SFT"
-# Math, the largest share of the rows (38%), gets two engines; code and IF one each.
-teacher() {   # $1 name in trainer.teachers (= the rows' skyrl_mopd_domain label), $2 model, $3 engines
-  printf '%s\n' \
-    "trainer.teachers.$1.backend=skyrl" \
-    "trainer.teachers.$1.model=$2" \
-    "trainer.teachers.$1.inference_engine.num_engines=$3" \
-    "trainer.teachers.$1.inference_engine.tensor_parallel_size=1" \
-    "trainer.teachers.$1.inference_engine.engine_init_kwargs.max_model_len=$((MAX_PROMPT + MAX_RESP + 1))" \
-    "trainer.teachers.$1.max_concurrency=$((32 * $3))"
-}
+# Each domain's expert, served from h100-6 (config.sh, V2_TEACHER_SERVERS): RL_Math on 4 engines (it also serves
+# 2a), RL_Coding and RL_IF on 2 each.
 v2_collect < <(
   v2_opd_recipe
-  teacher math "$M2RL_MATH" 2
-  teacher code "$M2RL_CODE" 1
-  teacher if "$M2RL_IF" 1
+  v2_remote_teacher trainer.teachers.math rl_math
+  v2_remote_teacher trainer.teachers.code rl_coding
+  v2_remote_teacher trainer.teachers.if rl_if
   printf '%s\n' trainer.algorithm.opd.route_key=skyrl_mopd_domain
   v2_bookkeeping "['mopd','section3','nemotron3-nano-rl-math-code-if','M2RL-SFT','teacher:M2RL-RL_Math','teacher:M2RL-RL_Coding','teacher:M2RL-RL_IF']"
 )

@@ -174,7 +174,11 @@ run_stage() {
   done
   [[ -n "$todo" ]] || { echo "Nothing to start."; return 0; }
   if [[ $GO == 0 ]]; then echo "Nothing was started. Add --yes to start it."; return 0; fi
-  local item jobs zone
+  local item jobs zone ips
+  # Every node's internal IP, written to ~/opd-store/nodes.env on each node it starts: a run finds the node that serves
+  # its teacher there (common/run_lib.sh, v2_remote_teacher). A node recreated elsewhere gets a new IP; run again.
+  ips="$(nodes_ips | awk '{gsub("-", "_", $1); printf "V2_NODE_IP_%s=%s ", $1, $2}')"
+  [[ -n "$ips" ]] || { echo "could not read the nodes' addresses from gcloud" >&2; exit 1; }
   for item in $todo; do
     node="${item%%:*}"; jobs="$(tr ',' ' ' <<<"${item#*:}")"
     zone="$(awk -v n="$node" '$1 == n {print $3}' "$TMP/vm")"
@@ -184,6 +188,7 @@ run_stage() {
         git -C ~/SkyRL/skyrl-test fetch -q origin $KIT_BRANCH
         git -C ~/SkyRL/skyrl-test checkout -q -f -B $KIT_BRANCH FETCH_HEAD
         mkdir -p ~/opd-store/logs
+        printf '%s\\n' $ips > ~/opd-store/nodes.env
         cd ~/SkyRL
         setsid nohup bash skyrl-test/opd-blog-v2/common/chain.sh $jobs >> ~/opd-store/logs/chain.log 2>&1 < /dev/null &
         sleep 3

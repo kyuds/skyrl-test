@@ -1,18 +1,21 @@
 # Section 2: OPD breaks when the student is not aligned with the teacher
 
 One student, M2RL-SFT (Qwen3-4B-Base SFT'd on NVIDIA's Nemotron 3 Nano data), on M2RL's math prompts, with M2RL's own
-MT-OPD recipe. Two teachers of about the same AIME score but different lineage:
+MT-OPD recipe. Two teachers of about the same AIME score but different lineage (AIME 2024/2025, measured on
+2026-11-10, `../0-evals/README.md`):
 
-- **2a, aligned:** M2RL-RL_Math, RL'd from this very student. AIME 2024/2025: 77.66/70.42 (M2RL Table 3).
-- **2b, misaligned:** Qwen3-32B in thinking mode: stronger (81.4/72.9, Qwen3 report Table 13), but trained along a
-  different line. Expected to break.
+- **2a, aligned:** M2RL-RL_Math, RL'd from this very student: 82.29/75.83 (M2RL Table 3 says 77.66/70.42).
+- **2b, misaligned:** Qwen3-32B in thinking mode, trained along a different line: 80.68/72.24 at Qwen's settings
+  (Qwen3 report Table 13: 81.4/72.9). Expected to break.
 
 Then two fixes for 2b, with the same teacher:
 
 - **2c, SFT warm-up:** M2RL-SFT first SFT'd on Qwen3-32B's correct answers to the same math prompts, then 2b's OPD.
 - **2d, clipping:** 2b with each token's teacher signal clipped from below.
 
-The student starts at 56.04/51.30 (M2RL Table 3); both teachers leave about 20 points to learn. The smoke tests of
+The student starts at 56.51/43.54 measured (M2RL Table 3: 56.04/51.30); both teachers leave 24 to 32 points to
+learn. Its AIME 2025 miss is its own behaviour: 21% of its answers there are a bare Python tool call, which scores
+0 (`../0-evals/README.md`). The smoke tests of
 2026-11-09 already point the expected way: at step 1 (512-token answers), M2RL-SFT's reverse KL to Qwen3-32B was 0.81,
 against 0.11 to RL_Math. Qwen3-32B's chat template renders the student's prompts exactly as M2RL-SFT's does (checked
 2026-11-09), so the teacher scores the same tokens the student wrote.
@@ -50,7 +53,9 @@ same block with three.
 | 2d's clip | `advantage_clip_min=-2.3` nats | this kit's (below) |
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's, at M2RL's eval settings (`../0-evals`) |
 
-Infrastructure: 4 GPUs for the student (training and generation colocated), 4 for the teacher; micro-batch 1;
+Infrastructure: for 2a, 2b and 2d, all 8 GPUs for the student (training and generation colocated), with the teacher
+served from a node of its own (`../teachers/`): Qwen3-32B from h100-5 (4 engines of 2 GPUs, shared by 2b and 2d),
+RL_Math from h100-6. For 2c, on b200-2, 4 GPUs for the student and 4 for its own Qwen3-32B. Micro-batch 1;
 checkpoints every 10 steps (the last 2 kept), exports every 50, and the last export goes to the Hub.
 
 ## 2c's warm-up
@@ -136,8 +141,16 @@ On W&B `opd-blog-v2`, for 2a to 2d side by side:
 - **The teachers differ in size as well as lineage** (4B against 32B). A reader can ask whether size, not alignment,
   breaks 2b. The smoke tests' reverse KL is the direct evidence that it is alignment; 2c and 2d fixing 2b with the
   same 32B teacher is the stronger evidence.
-- **Qwen3-32B is a slow teacher on H100s**: two engines of two GPUs each score every rollout. 2b and 2d may take
-  noticeably longer per step than 2a; 2c runs on a B200.
+- **The aligned teacher measured slightly stronger** (82.29/75.83 against Qwen3-32B's 80.68/72.24), so part of any
+  2a-over-2b gap could be teacher strength rather than alignment. 2c and 2d, with the same teacher as 2b, are the
+  clean comparison.
+- **The student's tool calls.** Neither teacher writes `<tool_call>` here, so OPD should remove M2RL-SFT's bare tool
+  calls early in every run, 2b included. Part of any early AIME gain is that alone; count the tool-call rate in the
+  final evals' `responses.jsonl` before reading a gain as learned math.
+- **2b and 2d share one Qwen3-32B server** (h100-5, 4 engines of 2 GPUs), and 2a shares RL_Math with MOPD
+  (h100-6). If a shared server falls behind, 2b and 2d slow down together; `opd/teacher` scoring time and the step
+  time show it. If a teacher node is preempted, its runs fail and resume from their last checkpoint
+  (`../teachers/README.md`).
 - **2c's warm-up recipe is borrowed, not tuned** (above).
 
 [paper]: https://arxiv.org/abs/2602.12566

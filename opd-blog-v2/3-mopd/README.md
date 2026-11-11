@@ -34,7 +34,8 @@ the same block as section 2's.
 | Loss | importance sampling; each rollout's token mean, averaged over the batch | [slime] `--calculate-per-token-loss` off; [mean] |
 | In-training eval | AIME 24 and 25, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's |
 
-Infrastructure: 4 GPUs for the student, 4 for the teachers; 32 requests in flight per teacher engine;
+Infrastructure: all 8 GPUs for the student; the teachers are served from h100-6 (`../teachers/`): RL_Math on 4
+engines (shared with 2a), RL_Coding and RL_IF on 2 each; 16 requests in flight per teacher engine;
 `trainer.algorithm.opd.route_key=skyrl_mopd_domain`.
 
 Every teacher's term enters the same advantage and the same loss. Nothing reweights the teachers: token
@@ -42,15 +43,18 @@ share balancing is not in the pinned commit.
 
 ## Targets
 
-Each expert's own score in its domain (M2RL Table 3), from M2RL-SFT's:
+Each expert's own score in its domain, from M2RL-SFT's, as measured on 2026-11-10 with this kit's harness
+(`../0-evals/README.md`); M2RL Table 3's in brackets:
 
 | Benchmark | M2RL-SFT (start) | Expert (target) | Paper's MT-OPD, 5 teachers (reference only) |
 |---|---|---|---|
-| AIME 2024 / 2025 | 56.04 / 51.30 | RL_Math 77.66 / 70.42 | 80.57 / 74.48 |
-| LiveCodeBench v5 / v6 | 55.92 / 52.00 | RL_Coding 65.00 / 58.86 | 63.31 / 58.86 |
-| IFEval / IFBench | 79.48 / 38.44 | RL_IF 90.94 / 59.52 | 93.90 / 59.18 |
+| AIME 2024 / 2025 | 56.51 / 43.54 (56.04 / 51.30) | RL_Math 82.29 / 75.83 (77.66 / 70.42) | 80.57 / 74.48 |
+| LiveCodeBench v5 / v6 | 57.52 / 48.85 (55.92 / 52.00) | RL_Coding 61.70 / 54.96 (65.00 / 58.86) | 63.31 / 58.86 |
+| IFEval / IFBench | 78.0 / 45.0 (79.48 / 38.44) | RL_IF 91.54 / 68.33 (90.94 / 59.52) | 93.90 / 59.18 |
 
-Success is recovering most of each expert's gain over M2RL-SFT in its own domain. The paper's MT-OPD row used five
+Success is recovering most of each expert's gain over M2RL-SFT in its own domain, measured: the gains to recover are
+about 26 / 32 on AIME, 4 / 6 on LiveCodeBench (small, against the paper's 9 / 7) and 14 / 23 on IFEval / IFBench.
+The paper's MT-OPD column is on M2RL's harness and does not compare directly with the measured ones. The paper's MT-OPD row used five
 teachers (with science and agent), and the paper says 300 steps against 400 here, so it is not matched exactly.
 
 ## Run by hand

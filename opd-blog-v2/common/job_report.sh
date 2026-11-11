@@ -31,6 +31,10 @@ for job in "$@"; do
     progress="step ${step:-0/}"
     if [[ -n "$step" ]]; then progress="step ${step%%:*}/$total, ${step#*: }"; progress="${progress/step Step /step }"; fi
     progress="$progress, checkpoint $(cat "$STORE/ckpts/$job/latest_ckpt_global_step.txt" 2>/dev/null || echo 0)"
+  elif [[ -f "$STORE/teachers/$job.status" ]]; then
+    # teachers/serve.py rewrites it every minute while it serves: "serving qwen3_32b:31000 ok (08:05Z)"
+    progress="$(cat "$STORE/teachers/$job.status")"
+    if [[ $state != running ]]; then progress="was: $progress"; fi
   elif [[ -d "$STORE/evals/$job" ]]; then
     d="$STORE/evals/$job"
     if [[ -f "$d/scores.json" ]]; then
