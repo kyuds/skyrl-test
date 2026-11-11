@@ -133,6 +133,8 @@ v2_opd_recipe() {
     "generator.eval_n_samples_per_prompt=$EVAL_N" \
     "trainer.algorithm.opd.kl_coef=$KL_COEF" \
     trainer.algorithm.opd.use_task_reward=false \
+    "trainer.algorithm.opd.topk_metrics.num_rows=$V2_TOPK_ROWS" \
+    "trainer.algorithm.opd.topk_metrics.top_k=$V2_TOPK" \
     "trainer.algorithm.policy_loss_type=$LOSS" \
     "trainer.algorithm.loss_reduction=$LOSS_REDUCTION" \
     "trainer.algorithm.max_seq_len=$((MAX_PROMPT + MAX_RESP))" \

@@ -43,6 +43,14 @@ rl_if      h100-6  31003  $M2RL_IF    2  1
 # The longest sequence a served teacher scores: a 2,048-token prompt and a 16,384-token answer, sections 2 and 3's
 # lengths, plus one. A run with longer ones is refused (common/run_lib.sh, v2_remote_teacher).
 V2_TEACHER_MAX_LEN=18433
+# The top-K overlap metrics of every OPD run (SkyRL's trainer.algorithm.opd.topk_metrics; diagnostics only, the loss
+# is unchanged): each step, on V2_TOPK_ROWS rows per teacher, the share of the student's top V2_TOPK tokens that are
+# also in the teacher's top V2_TOPK, and the teacher advantage on those shared tokens. Logged as
+# opd/teacher/<name>/overlap_ratio and overlap_token_advantage. K=16 is the paper's; 16 rows, evenly spaced over a
+# teacher's rows, are the OPD stack's own plan (plan/opd-entrypoint/overlap-metrics.md). A served teacher must allow
+# K logprobs, so serve.sh passes the same two values to its servers.
+V2_TOPK_ROWS=16
+V2_TOPK=16
 # One field of a served model's line: 2 node, 3 port, 4 model, 5 engines, 6 GPUs per engine.
 v2_teacher_field() { echo "$V2_TEACHER_SERVERS" | awk -v k="$1" -v c="$2" '$1 == k {print $c; exit}'; }
 

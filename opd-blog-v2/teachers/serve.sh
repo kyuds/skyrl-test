@@ -31,6 +31,9 @@ for key in $keys; do
 done
 # Several teachers route by row label, so SkyRL wants a route key; the servers never see one.
 OVERRIDES+=(trainer.algorithm.opd.route_key=skyrl_mopd_domain)
+# The runs' top-K overlap metrics (config.sh): SkyRL's teacher launch then lets each server return V2_TOPK logprobs a
+# position, and serve.py's preflight checks that it does.
+OVERRIDES+=("trainer.algorithm.opd.topk_metrics.num_rows=$V2_TOPK_ROWS" "trainer.algorithm.opd.topk_metrics.top_k=$V2_TOPK")
 
 if [[ $V2_DRY_RUN == 1 ]]; then
   echo "serve ${PORTS[*]}"
