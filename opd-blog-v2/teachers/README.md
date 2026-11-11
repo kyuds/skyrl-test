@@ -76,7 +76,12 @@ Stop a server with `orchestrate.sh stop h100-5`. Start it again with `orchestrat
   2. Start its server: `orchestrate.sh run 2 --only <node> --yes`.
   3. Rerun the failed runs with `orchestrate.sh run 2 --yes`.
 
-  A teacher node recreated elsewhere has a new IP. `orchestrate.sh run` rewrites `nodes.env` on each node it starts.
+  A teacher node recreated elsewhere has a new IP. `orchestrate.sh run` rewrites `nodes.env` on each node it starts,
+  so start a run that scores against it only after the server node is back.
+- **The first start on an empty cache is slow.** A preemption wipes the NVMe array and with it `~/.cache` (vLLM's
+  compile cache, FlashInfer's kernels). A Qwen3-32B server then builds FlashInfer's all-reduce kernel before it
+  captures its CUDA graphs: on h100-7 on 2026-11-11 an engine took 557 s to start, and SkyRL's default of 600 s for a
+  server to answer `/health` ran out. `serve.sh` raises it to 1,800 s.
 - **Qwen3-32B is the slowest teacher.** It started as one node shared by 2b and 2d (estimated at about 30% of its
   peak). Measured on 2026-11-11, it was saturated: with 2d alone, each of its 4 engines had requests queued in about
   half of vLLM's 10-second windows, ran only 2 or 3 at once, and averaged about 3,400 prompt tokens a second. 2d's

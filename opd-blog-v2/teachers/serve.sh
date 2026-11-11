@@ -50,5 +50,10 @@ for key in $keys; do
   uv run --isolated --extra fsdp hf download "$model" > /dev/null
 done
 # As v2_launch: no HF token in the process (every teacher is public), Ray ships this directory to its workers.
-exec env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp \
+# 1800 s for a server to answer /health, not SkyRL's 600 (SkyRL passes SKYRL_* variables on to its Ray workers). On a
+# node whose NVMe array is new or wiped by a preemption, the JIT and compile caches under ~/.cache are empty: a
+# Qwen3-32B engine (TP 2) then spends about 7 minutes building FlashInfer's all-reduce kernel before it captures its
+# CUDA graphs, and took 557 s to start on h100-7 on 2026-11-11, which with the launch before it missed the 600.
+exec env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN SKYRL_WAIT_UNTIL_INFERENCE_SERVER_HEALTHY_TIMEOUT_S=1800 \
+  uv run --isolated --extra fsdp \
   python "$V2_KIT/teachers/serve.py" "${PORTS[@]}" --status-file "$OPD_STORE/teachers/$RUN.status" -- "${OVERRIDES[@]}"
