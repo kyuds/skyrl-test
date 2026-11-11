@@ -46,10 +46,13 @@ V2_TEACHER_MAX_LEN=18433
 # The top-K overlap metrics of every OPD run (SkyRL's trainer.algorithm.opd.topk_metrics; diagnostics only, the loss
 # is unchanged): each step, on V2_TOPK_ROWS rows per teacher, the share of the student's top V2_TOPK tokens that are
 # also in the teacher's top V2_TOPK, and the teacher advantage on those shared tokens. Logged as
-# opd/teacher/<name>/overlap_ratio and overlap_token_advantage. K=16 is the paper's; 16 rows, evenly spaced over a
-# teacher's rows, are the OPD stack's own plan (plan/opd-entrypoint/overlap-metrics.md). A served teacher must allow
-# K logprobs, so serve.sh passes the same two values to its servers.
-V2_TOPK_ROWS=16
+# opd/teacher/<name>/overlap_ratio and overlap_token_advantage. K=16 is the paper's. 64 rows, evenly spaced over a
+# teacher's rows (all of them when it has fewer), by choice on 2026-11-11: a quarter of a 1,024-answer batch, four times
+# the OPD stack's plan of 16 (plan/opd-entrypoint/overlap-metrics.md), for a less noisy curve. The count is per
+# teacher, so MOPD measures up to 192 rows. Each measured row's teacher sends its top K over the whole sequence as
+# JSON, roughly 5 MB at 12,000 tokens (an estimate), so about 0.3 GB a step per teacher. A served teacher must allow K
+# logprobs, so serve.sh passes the same two values to its servers.
+V2_TOPK_ROWS=64
 V2_TOPK=16
 # One field of a served model's line: 2 node, 3 port, 4 model, 5 engines, 6 GPUs per engine.
 v2_teacher_field() { echo "$V2_TEACHER_SERVERS" | awk -v k="$1" -v c="$2" '$1 == k {print $c; exit}'; }
