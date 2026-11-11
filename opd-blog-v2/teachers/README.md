@@ -1,7 +1,7 @@
 # Teacher servers: OPD teachers on nodes of their own
 
-Since 2026-11-11, the OPD runs on the H100s (2a, 2b, 2d and MOPD) score with teachers served from two extra H100
-nodes, h100-5 and h100-6. Each run's student has all 8 GPUs of its node. 2c, on b200-2, still runs its teacher on 4 of
+Since 2026-11-11, the OPD runs on the H100s (2a, 2b, 2d and MOPD) score with teachers served from three extra H100
+nodes, h100-5 to h100-7. Each run's student has all 8 GPUs of its node. 2c, on b200-2, still runs its teacher on 4 of
 its own GPUs.
 
 ## Why
@@ -30,7 +30,8 @@ Ruled out:
 
 | Model | Node | Router port | Engines | Serves |
 |---|---|---|---|---|
-| Qwen3-32B | h100-5 | 31000 | 4 × 2 GPUs | 2b, 2d |
+| Qwen3-32B | h100-5 | 31000 | 4 × 2 GPUs | 2d |
+| Qwen3-32B | h100-7 | 31000 | 4 × 2 GPUs | 2b |
 | M2RL-RL_Math | h100-6 | 31001 | 4 × 1 | 2a, MOPD's math rows |
 | M2RL-RL_Coding | h100-6 | 31002 | 2 × 1 | MOPD's code rows |
 | M2RL-RL_IF | h100-6 | 31003 | 2 × 1 | MOPD's IF rows |
@@ -68,17 +69,19 @@ Stop a server with `orchestrate.sh stop h100-5`. Start it again with `orchestrat
 
 ## What could go wrong
 
-- **One teacher node stops four runs.** If h100-5 is preempted, 2b and 2d fail on their next teacher request once the
-  retries run out. If h100-6 is, 2a and MOPD do. Each resumes from its last checkpoint (every 10 steps) once the
+- **A teacher node stops its runs.** If h100-5 or h100-7 is preempted, 2d or 2b fails on its next teacher request once
+  the retries run out. If h100-6 is, 2a and MOPD do. Each resumes from its last checkpoint (every 10 steps) once the
   server is back:
   1. Restart the node: `gcp/02_setup_nodes.sh --only <node>`, or `gcp/migrate.sh` if its zone has no capacity.
   2. Start its server: `orchestrate.sh run 2 --only <node> --yes`.
   3. Rerun the failed runs with `orchestrate.sh run 2 --yes`.
 
   A teacher node recreated elsewhere has a new IP. `orchestrate.sh run` rewrites `nodes.env` on each node it starts.
-- **Shared servers.** 2b and 2d share Qwen3-32B, and 2a and MOPD share RL_Math, so one run's burst can slow the other's
-  scoring. The estimate, from 2b's first launch: two runs at the faster pace need about 30% of the Qwen3-32B node's
-  peak. Not measured under load yet.
+- **Qwen3-32B is the slowest teacher.** It started as one node shared by 2b and 2d (estimated at about 30% of its
+  peak). Measured on 2026-11-11, it was saturated: with 2d alone, each of its 4 engines had requests queued in about
+  half of vLLM's 10-second windows, ran only 2 or 3 at once, and averaged about 3,400 prompt tokens a second. 2d's
+  answers took 640 to 900 s a step to generate and score, against 2a's 460 to 530. So 2b got its own node, h100-7.
+  2a and MOPD still share RL_Math, which is far from busy.
 - **Cross-region traffic.** Each run step sends its 1,024 answers to the teacher and gets the scores back, roughly
   1 GB a step across regions. That is an estimate, not a measurement: about 1.6 TB over the four runs, billed as
   network egress at roughly $0.01 to $0.08 per GB.

@@ -54,8 +54,8 @@ same block with three.
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's, at M2RL's eval settings (`../0-evals`) |
 
 Infrastructure: for 2a, 2b and 2d, all 8 GPUs for the student (training and generation colocated), with the teacher
-served from a node of its own (`../teachers/`): Qwen3-32B from h100-5 (4 engines of 2 GPUs, shared by 2b and 2d),
-RL_Math from h100-6. For 2c, on b200-2, 4 GPUs for the student and 4 for its own Qwen3-32B. Micro-batch 1;
+served from a node of its own (`../teachers/`): Qwen3-32B from h100-7 for 2b and from h100-5 for 2d (4 engines of 2
+GPUs each), RL_Math from h100-6. For 2c, on b200-2, 4 GPUs for the student and 4 for its own Qwen3-32B. Micro-batch 1;
 checkpoints every 10 steps (the last 2 kept), exports every 50, and the last export goes to the Hub.
 
 ## 2c's warm-up
@@ -147,9 +147,8 @@ On W&B `opd-blog-v2`, for 2a to 2d side by side:
 - **The student's tool calls.** Neither teacher writes `<tool_call>` here, so OPD should remove M2RL-SFT's bare tool
   calls early in every run, 2b included. Part of any early AIME gain is that alone; count the tool-call rate in the
   final evals' `responses.jsonl` before reading a gain as learned math.
-- **2b and 2d share one Qwen3-32B server** (h100-5, 4 engines of 2 GPUs), and 2a shares RL_Math with MOPD
-  (h100-6). If a shared server falls behind, 2b and 2d slow down together; `opd/teacher` scoring time and the step
-  time show it. If a teacher node is preempted, its runs fail and resume from their last checkpoint
+- **Qwen3-32B is the slowest teacher**: even a node of its own (4 engines of 2 GPUs) keeps 2b's and 2d's steps
+  longer than 2a's (`../teachers/README.md`). 2a shares RL_Math with MOPD (h100-6). If a teacher node is preempted, its runs fail and resume from their last checkpoint
   (`../teachers/README.md`).
 - **2c's warm-up recipe is borrowed, not tuned** (above).
 

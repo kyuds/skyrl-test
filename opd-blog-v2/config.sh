@@ -30,10 +30,12 @@ M2RL_IF=Jackwang111/M2RL-RL_IF
 # student has all 8 GPUs of its node. Each line is one served model: SkyRL's own teacher launch (vLLM servers plus a
 # router) kept up by the job serve_teachers_<node>, reached by the runs at http://<node's internal IP>:<port>.
 #   <key> <node> <router port> <model> <engines> <GPUs per engine>
-# Qwen3-32B takes a whole node, as 2b and 2d share it; RL_Math serves 2a and MOPD's math rows. 2c runs on b200-2
-# with its own teacher on 4 of its GPUs.
+# Qwen3-32B takes a whole node for each of 2b and 2d: one shared node was saturated on 2026-11-11 (its 4 engines had
+# requests queued half the time with 2d alone). RL_Math serves 2a and MOPD's math rows. 2c runs on b200-2 with its own
+# teacher on 4 of its GPUs.
 V2_TEACHER_SERVERS="${V2_TEACHER_SERVERS:-
-qwen3_32b  h100-5  31000  $QWEN3_32B  4  2
+qwen3_32b     h100-5  31000  $QWEN3_32B  4  2
+qwen3_32b_2b  h100-7  31000  $QWEN3_32B  4  2
 rl_math    h100-6  31001  $M2RL_MATH  4  1
 rl_coding  h100-6  31002  $M2RL_CODE  2  1
 rl_if      h100-6  31003  $M2RL_IF    2  1
@@ -67,6 +69,7 @@ V2_JOBS="${V2_JOBS:-
 1 h100-4 eval_m2rl_rl_if_if                   -                                       0-evals/run.sh eval_m2rl_rl_if_if Jackwang111/M2RL-RL_IF m2rl if
 2 h100-5 serve_teachers_h100_5                -                                       teachers/serve.sh h100-5
 2 h100-6 serve_teachers_h100_6                -                                       teachers/serve.sh h100-6
+2 h100-7 serve_teachers_h100_7                -                                       teachers/serve.sh h100-7
 2 b200-2 sft_2c_m2rl_sft_warmup               traces_2c_qwen3_32b                     2-alignment/sft_2c.sh
 2 b200-2 opd_2c_m2rl_warmup_from_qwen3_32b    sft_2c_m2rl_sft_warmup,eval_qwen3_32b_math,eval_m2rl_sft_math 2-alignment/opd.sh 2c
 2 b200-2 eval_opd_2c_final                    opd_2c_m2rl_warmup_from_qwen3_32b       0-evals/run.sh eval_opd_2c_final run:opd_2c_m2rl_warmup_from_qwen3_32b m2rl math

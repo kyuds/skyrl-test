@@ -66,7 +66,8 @@ MICRO=1                            # sequences per GPU per micro-batch
 STUDENT="$M2RL_SFT"
 case "$variant" in
   2a) TEACHER="$M2RL_MATH"; SERVED=rl_math ;;     # served from h100-6 (config.sh, V2_TEACHER_SERVERS)
-  2b|2d) TEACHER="$QWEN3_32B"; SERVED=qwen3_32b ;; # served from h100-5, shared by 2b and 2d
+  2b) TEACHER="$QWEN3_32B"; SERVED=qwen3_32b_2b ;;  # served from h100-7, for 2b alone
+  2d) TEACHER="$QWEN3_32B"; SERVED=qwen3_32b ;;     # served from h100-5, for 2d alone
   2c) TEACHER="$QWEN3_32B"; SERVED=""             # on this node: b200-2's other 4 GPUs, 1 per engine on a B200
       STUDENT="$(v2_model kit:sft_2c_m2rl_sft_warmup)"; STUDENT_GPUS=4 ;;
 esac

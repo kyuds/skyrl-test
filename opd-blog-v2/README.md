@@ -1,7 +1,7 @@
 # OPD blog v2
 
 The experiments behind the OPD blog post, as planned on 2026-11-10 with Charlie Ruan. Everything runs on GCP spot
-nodes (2 B200 and 6 H100, 8 GPUs each; two of the H100s only serve teachers) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
+nodes (2 B200 and 7 H100, 8 GPUs each; three of the H100s only serve teachers) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
 W&B project `opd-blog-v2` (evals in `opd-blog-v2-evals`), Hub repo `kyuds/opd-blog-v2`.
 
 **Every hyperparameter is in a `HYPERPARAMETERS` block at the top of its run script, each value with the source it
@@ -44,7 +44,7 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 
 ## The plan
 
-Eight nodes: 2 B200 and 6 H100, 8 GPUs each. h100-5 and h100-6, added on 2026-11-11, only serve teachers to the OPD
+Nine nodes: 2 B200 and 7 H100, 8 GPUs each. h100-5 to h100-7, added on 2026-11-11, only serve teachers to the OPD
 runs on h100-1 to h100-4, whose students take all 8 GPUs of their nodes ([`teachers/`](teachers/README.md)). Three stages, each started by hand
 with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and
 1a's SFT keeps running through stage 2.
@@ -57,8 +57,9 @@ with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only
 | h100-2 | eval: M2RL-RL_Math on AIME | `opd_2a` (RL_Math), its eval | |
 | h100-3 | eval: Qwen3-8B on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | |
 | h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `mopd_3`, then all six benchmarks | |
-| h100-5 | | serves Qwen3-32B to 2b and 2d | |
+| h100-5 | | serves Qwen3-32B to 2d | |
 | h100-6 | | serves RL_Math to 2a and MOPD, RL_Coding and RL_IF to MOPD | |
+| h100-7 | | serves Qwen3-32B to 2b | |
 
 What each OPD run waits for:
 
