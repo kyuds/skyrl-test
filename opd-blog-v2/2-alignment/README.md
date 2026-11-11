@@ -78,9 +78,9 @@ M2RL-SFT on teacher answers, the multi-teacher off-policy distillation (MT-OFF) 
 | Setting | Value | Source |
 |---|---|---|
 | Base | `Jackwang111/M2RL-SFT` | |
-| Data | the kept answers, one per prompt (about 17,000 expected, not measured) | above |
+| Data | the kept answers, one per prompt: 12,535 of the 22,056 prompts, 103M tokens, 8,252 per answer on average (measured 2026-11-11; Qwen3-32B was right on 50.2% of its 44,112 answers, and 25.4% hit the 16,384-token limit) | above |
 | Learning rate | 5e-5 | [paper] appendix A, MT-OFF |
-| Batch | 512, 1 epoch (about 33 steps) | [paper] MT-OFF; the epoch count is ASSUMED |
+| Batch | 512, 1 epoch (25 steps) | [paper] MT-OFF; the epoch count is ASSUMED |
 | Warmup | 10% of the steps, then constant | [paper] appendix A, SFT ("10% training steps ... for learning rate warmup"); no decay is given, so constant is ASSUMED |
 | Optimizer | Adam, betas 0.9 and 0.98 (ASSUMED: not given for SFT, taken from [script]), weight decay 0.1 | [paper] appendix A, SFT |
 | Grad clip | 1.0 | [slime] default |
