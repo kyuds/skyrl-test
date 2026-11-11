@@ -91,7 +91,12 @@ and the mean was 13,131 tokens, so 384,000 rows are about 5 billion tokens.
   IF checker to train.
 
 SkyRL pins ANTLR 4.9.3 (through omegaconf), and math-verify's parser for that version leaves percentages unparsed.
-The grader drops `%` from both sides, so `20` matches `20\%`, but `0.2` does not. `0-evals` grades math with the same
+The grader drops `%` from both sides, so `20` matches `20\%`, but `0.2` does not.
+
+math-verify runs in child processes, at most 10 seconds an answer, then counted wrong (`common/kit_main.py`,
+`_symbolic_equal`). Some gold answers of the math set never finish in sympy (`3^{2^{2018}}-1`, among 4 found on
+2026-11-11, when they hung the grading of Qwen3-32B's answers), and the training environment grades from threads,
+where math-verify's own timeouts cannot fire. On 2,000 sampled answers the verdicts are the same as before. `0-evals` grades math with the same
 function.
 
 ## Verified and assumed

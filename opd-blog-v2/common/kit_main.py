@@ -90,16 +90,83 @@ def is_correct(response: str, ground_truth: str) -> bool:
     pred, ground_truth = _drop_percent(pred), _drop_percent(ground_truth)
     if _normalize(pred) == _normalize(ground_truth):
         return True
-    from math_verify import parse, verify
+    return _symbolic_equal(ground_truth, pred)
 
-    # math-verify times out with signal.alarm, which only works on the main thread; the generator calls step() from
-    # an executor thread, so its timeouts are off.
+
+# math-verify runs in child processes with a hard deadline. It never returns on some gold answers of M2RL's math set:
+# 6 of Qwen3-32B's 44,112 answers to it hung the grader on 2026-11-11, on 4 prompts whose golds are 3^{2^{2018}}-1
+# (sympy builds the integer), (10001111101)_{2}, a sum to 2016 with 10^{2017} in it and a binomial sum. A run grading
+# in-process would stall for good the first time one of them met an answer that is not the same string. math-verify's
+# own timeouts use signal.alarm, which works only on a process's main thread (the generator grades from executor
+# threads), and no signal interrupts a long C call such as a huge integer power. So the parse and the compare run in a
+# child, on its own main thread with math-verify's timeouts on, and a child that does not answer within
+# VERIFY_DEADLINE_S is killed and the answer counted wrong. VERIFY_CHILDREN children serve the grading threads.
+VERIFY_DEADLINE_S = 10
+VERIFY_CHILDREN = 8
+_VERIFY_CHILD = r"""
+import json, sys
+from math_verify import parse, verify
+for line in sys.stdin:
+    gold_text, pred_text = json.loads(line)
     try:
-        gold = parse("\\boxed{" + ground_truth + "}", parsing_timeout=None)
-        target = parse("\\boxed{" + pred + "}", parsing_timeout=None)
-        return bool(gold and target and verify(gold, target, timeout_seconds=None))
-    except Exception:
-        return False
+        gold = parse("\\boxed{" + gold_text + "}", parsing_timeout=3)
+        target = parse("\\boxed{" + pred_text + "}", parsing_timeout=3)
+        ok = bool(gold and target and verify(gold, target, timeout_seconds=3))
+    except BaseException:
+        ok = False
+    sys.stdout.write("1\n" if ok else "0\n")
+    sys.stdout.flush()
+"""
+
+
+class _ProcessLocal(dict):
+    """State of the process that grades, filled on first use. Ray pickles this module's functions by value, with what
+    they refer to; this pickles as empty, so a copy starts its own children instead of carrying a queue and processes."""
+
+    def __reduce__(self):
+        return (_ProcessLocal, ())
+
+
+_VERIFIERS = _ProcessLocal()
+
+
+def _symbolic_equal(gold_text: str, pred_text: str) -> bool:
+    """math-verify's verdict on two answer strings, from a child process; False if it fails or takes too long."""
+    import json
+    import queue
+    import select
+    import subprocess
+
+    slots = _VERIFIERS.get("slots")
+    if slots is None:
+        fresh: "queue.Queue" = queue.Queue()
+        for _ in range(VERIFY_CHILDREN):
+            fresh.put(None)  # a child is started on the slot's first use
+        slots = _VERIFIERS.setdefault("slots", fresh)
+    child = slots.get()
+    answer = ""
+    try:
+        if child is None or child.poll() is not None:
+            child = subprocess.Popen(
+                [sys.executable, "-c", _VERIFY_CHILD],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        child.stdin.write(json.dumps([gold_text, pred_text]) + "\n")
+        child.stdin.flush()
+        if select.select([child.stdout], [], [], VERIFY_DEADLINE_S)[0]:
+            answer = child.stdout.readline().strip()
+    except (OSError, ValueError):
+        answer = ""
+    finally:
+        if answer not in ("0", "1") and child is not None:
+            child.kill()
+            child.wait()
+            child = None
+        slots.put(child)
+    return answer == "1"
 
 
 class MathVerifyEnv(BaseTextEnv):
