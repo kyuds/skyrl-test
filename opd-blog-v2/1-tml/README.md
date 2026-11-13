@@ -5,10 +5,10 @@ from Qwen3-8B in about 150 steps (70%). This section recreates both steps.
 
 | Job | Stage | Node | What | Target |
 |---|---|---|---|---|
-| `sft_1a_qwen3_8b_base_ot3` | 1 | b200-1 | 1a: SFT of Qwen3-8B-Base on 384k OpenThoughts-3 rows | 60% AIME 2024 |
-| `eval_sft_1a` | 3 | b200-1 | 1a at 64 samples (`../0-evals`), before 1b | 60% |
-| `opd_1b_ot3sft8b_from_qwen3_8b` | 3 | b200-1 | 1b: OPD of 1a from Qwen3-8B | 70% |
-| `eval_opd_1b_final` | 3 | b200-1 | 1b's last export at 64 samples | 70% |
+| `sft_1a_qwen3_8b_base_ot3` | 1 | b200-2 (b200-1 until its preemption) | 1a: SFT of Qwen3-8B-Base on 384k OpenThoughts-3 rows | 60% AIME 2024 |
+| `eval_sft_1a` | 3 | h100-6 | 1a at 64 samples (`../0-evals`), before 1b | 60% |
+| `opd_1b_ot3sft8b_from_qwen3_8b` | 3 | b200-2, teacher on h100-2 | 1b: OPD of 1a from Qwen3-8B | 70% |
+| `eval_opd_1b_final` | 3 | b200-2 | 1b's last export at 64 samples | 70% |
 
 The teacher is Qwen3-8B in thinking mode. The post presents Qwen3-32B, but says it actually used Qwen3-8B because it
 performed slightly better.
