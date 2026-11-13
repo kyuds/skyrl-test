@@ -217,10 +217,15 @@ v2_wait_teachers() {
   done
 }
 
-# Logging, checkpoints, exports and resume: the same for every run. A checkpoint every 10 steps (the last 2 kept)
-# bounds what a preemption costs; an HF export every 50 steps keeps a usable model near any eval.
+# Logging, checkpoints, exports and resume: the same for every run. A checkpoint every 5 steps (the last 2 kept)
+# bounds what a preemption costs: since 2026-11-13 a run scores against a teacher on another spot node, and that node's
+# preemption fails the run too (twice for 1b in its first 10 hours). A save took 15 to 47 s for 1b, plus up to 32 s to
+# delete the oldest. Every checkpoint step also has an eval (EVAL_EVERY is 5 or divides it), so a resumed run skips the
+# eval before its first step: it would repeat the one logged at that step, about 10 minutes for 1b. An HF export every
+# 50 steps keeps a usable model near any eval.
 v2_bookkeeping() {
-  local tags="$1"
+  local tags="$1" eval_first=true
+  [[ -f "$CKPT_ROOT/$RUN/latest_ckpt_global_step.txt" ]] && eval_first=false
   printf '%s\n' \
     trainer.logger=wandb \
     "trainer.project_name=$PROJECT" \
@@ -229,11 +234,11 @@ v2_bookkeeping() {
     "trainer.ckpt_path=$CKPT_ROOT/$RUN" \
     "trainer.export_path=$EXPORT_ROOT/$RUN" \
     "trainer.log_path=$LOGS/skyrl/$RUN" \
-    trainer.ckpt_interval=10 \
+    trainer.ckpt_interval=5 \
     trainer.max_ckpts_to_keep=2 \
     trainer.hf_save_interval=50 \
     trainer.resume_mode=latest \
-    trainer.eval_before_train=true \
+    "trainer.eval_before_train=$eval_first" \
     "trainer.eval_interval=$EVAL_EVERY" \
     trainer.eval_batch_size=1024 \
     trainer.epochs=20
