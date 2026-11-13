@@ -32,15 +32,17 @@ M2RL_IF=Jackwang111/M2RL-RL_IF
 #   <key> <node> <router port> <model> <engines> <GPUs per engine>
 # Qwen3-32B takes a whole node for each of 2b and 2d: one shared node was saturated on 2026-11-11 (its 4 engines had
 # requests queued half the time with 2d alone). RL_Math serves 2a and MOPD's math rows. 2c runs on b200-2 with its own
-# teacher on 4 of its GPUs. Qwen3-8B serves 1b, whose student is on b200-2, from h100-2 (2a's student node, free since
-# 2a was put off on 2026-11-12 to get 1b going first).
+# teacher on 4 of its GPUs. Qwen3-8B serves 1b, whose student is on b200-2, from h100-6: it served from h100-2 until
+# h100-2 was preempted on 2026-11-13 at 08:03Z with europe-west2-b out of capacity, and the RL teachers moved to h100-2
+# in exchange. Stage 2 has not been relaid out for one teacher node per run yet: as listed, 2a's student and its teacher
+# would both be on h100-2.
 V2_TEACHER_SERVERS="${V2_TEACHER_SERVERS:-
-qwen3_8b      h100-2  31000  $QWEN3_8B   8  1
+qwen3_8b      h100-6  31000  $QWEN3_8B   8  1
 qwen3_32b     h100-5  31000  $QWEN3_32B  4  2
 qwen3_32b_2b  h100-7  31000  $QWEN3_32B  4  2
-rl_math    h100-6  31001  $M2RL_MATH  4  1
-rl_coding  h100-6  31002  $M2RL_CODE  2  1
-rl_if      h100-6  31003  $M2RL_IF    2  1
+rl_math    h100-2  31001  $M2RL_MATH  4  1
+rl_coding  h100-2  31002  $M2RL_CODE  2  1
+rl_if      h100-2  31003  $M2RL_IF    2  1
 }"
 # The longest sequence a served teacher scores: a 2,048-token prompt and a 16,384-token answer, sections 2 and 3's
 # lengths, plus one. A run with longer ones is refused (common/run_lib.sh, v2_remote_teacher).
@@ -81,7 +83,7 @@ V2_JOBS="${V2_JOBS:-
 1 h100-4 eval_m2rl_rl_coding_code             -                                       0-evals/run.sh eval_m2rl_rl_coding_code Jackwang111/M2RL-RL_Coding m2rl code
 1 h100-4 eval_m2rl_rl_if_if                   -                                       0-evals/run.sh eval_m2rl_rl_if_if Jackwang111/M2RL-RL_IF m2rl if
 2 h100-5 serve_teachers_h100_5                -                                       teachers/serve.sh h100-5
-2 h100-6 serve_teachers_h100_6                -                                       teachers/serve.sh h100-6
+2 h100-2 serve_teachers_h100_2                -                                       teachers/serve.sh h100-2
 2 h100-7 serve_teachers_h100_7                -                                       teachers/serve.sh h100-7
 2 b200-2 sft_2c_m2rl_sft_warmup               traces_2c_qwen3_32b                     2-alignment/sft_2c.sh
 2 b200-2 opd_2c_m2rl_warmup_from_qwen3_32b    sft_2c_m2rl_sft_warmup,eval_qwen3_32b_math,eval_m2rl_sft_math 2-alignment/opd.sh 2c
@@ -94,7 +96,7 @@ V2_JOBS="${V2_JOBS:-
 2 h100-3 eval_opd_2d_final                    opd_2d_m2rl_sft_from_qwen3_32b_clip     0-evals/run.sh eval_opd_2d_final run:opd_2d_m2rl_sft_from_qwen3_32b_clip m2rl math
 2 h100-4 mopd_3_m2rl_sft_from_math_code_if    eval_m2rl_sft_math,eval_m2rl_rl_math_math,eval_m2rl_sft_code_if,eval_m2rl_rl_coding_code,eval_m2rl_rl_if_if 3-mopd/run.sh
 2 h100-4 eval_mopd_3_final                    mopd_3_m2rl_sft_from_math_code_if       0-evals/run.sh eval_mopd_3_final run:mopd_3_m2rl_sft_from_math_code_if m2rl all
-3 h100-2 serve_teachers_h100_2                -                                       teachers/serve.sh h100-2
+3 h100-6 serve_teachers_h100_6                -                                       teachers/serve.sh h100-6
 3 h100-6 eval_sft_1a                          sft_1a_qwen3_8b_base_ot3                0-evals/run.sh eval_sft_1a kit:sft_1a_qwen3_8b_base_ot3 qwen math
 3 b200-2 opd_1b_ot3sft8b_from_qwen3_8b        sft_1a_qwen3_8b_base_ot3,eval_qwen3_8b_math 1-tml/opd.sh
 3 b200-2 eval_opd_1b_final                    opd_1b_ot3sft8b_from_qwen3_8b           0-evals/run.sh eval_opd_1b_final run:opd_1b_ot3sft8b_from_qwen3_8b qwen math

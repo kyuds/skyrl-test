@@ -30,12 +30,12 @@ Ruled out:
 
 | Model | Node | Router port | Engines | Serves |
 |---|---|---|---|---|
-| Qwen3-8B | h100-2 | 31000 | 8 × 1 | 1b (student on b200-2) |
+| Qwen3-8B | h100-6 | 31000 | 8 × 1 | 1b (student on b200-2); h100-2 until its preemption on 2026-11-13 |
 | Qwen3-32B | h100-5 | 31000 | 4 × 2 GPUs | 2d |
 | Qwen3-32B | h100-7 | 31000 | 4 × 2 GPUs | 2b |
-| M2RL-RL_Math | h100-6 | 31001 | 4 × 1 | 2a, MOPD's math rows |
-| M2RL-RL_Coding | h100-6 | 31002 | 2 × 1 | MOPD's code rows |
-| M2RL-RL_IF | h100-6 | 31003 | 2 × 1 | MOPD's IF rows |
+| M2RL-RL_Math | h100-2 | 31001 | 4 × 1 | 2a, MOPD's math rows |
+| M2RL-RL_Coding | h100-2 | 31002 | 2 × 1 | MOPD's code rows |
+| M2RL-RL_IF | h100-2 | 31003 | 2 × 1 | MOPD's IF rows |
 
 Each served teacher scores up to 18,433 tokens (`V2_TEACHER_MAX_LEN`), sections 2 and 3's 2,048-token prompt and
 16,384-token answer plus one.

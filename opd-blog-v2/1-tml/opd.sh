@@ -46,7 +46,7 @@ EVAL_TEMPERATURE=0.6               # [qwen3]
 EVAL_TOP_P=0.95                    # [qwen3]
 EVAL_TOP_K=20                      # [qwen3]
 # ---- infrastructure, not hyperparameters ----
-STUDENT_GPUS=8                     # the whole node: the teacher is served from h100-2 (config.sh, V2_TEACHER_SERVERS)
+STUDENT_GPUS=8                     # the whole node: the teacher is served from h100-6 (config.sh, V2_TEACHER_SERVERS)
 MICRO=2                            # sequences per GPU per micro-batch
 # =====================================================================================
 

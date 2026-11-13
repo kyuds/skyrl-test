@@ -7,7 +7,7 @@ from Qwen3-8B in about 150 steps (70%). This section recreates both steps.
 |---|---|---|---|---|
 | `sft_1a_qwen3_8b_base_ot3` | 1 | b200-2 (b200-1 until its preemption) | 1a: SFT of Qwen3-8B-Base on 384k OpenThoughts-3 rows | 60% AIME 2024 |
 | `eval_sft_1a` | 3 | h100-6 | 1a at 64 samples (`../0-evals`), before 1b | 60% |
-| `opd_1b_ot3sft8b_from_qwen3_8b` | 3 | b200-2, teacher on h100-2 | 1b: OPD of 1a from Qwen3-8B | 70% |
+| `opd_1b_ot3sft8b_from_qwen3_8b` | 3 | b200-2, teacher on h100-6 | 1b: OPD of 1a from Qwen3-8B | 70% |
 | `eval_opd_1b_final` | 3 | b200-2 | 1b's last export at 64 samples | 70% |
 
 The teacher is Qwen3-8B in thinking mode. The post presents Qwen3-32B, but says it actually used Qwen3-8B because it
@@ -61,7 +61,7 @@ Script: [`opd.sh`](opd.sh), block `HYPERPARAMETERS`.
 | Setting | Value | Source |
 |---|---|---|
 | Student | 1a's output | [c58e] README: OPD starts from the SFT checkpoint |
-| Teacher | `Qwen/Qwen3-8B`, thinking, served from h100-2: 8 engines × 1 GPU | [blog]; [opd] `teacher_model` |
+| Teacher | `Qwen/Qwen3-8B`, thinking, served from h100-6 (h100-2 until its preemption on 2026-11-13): 8 engines × 1 GPU | [blog]; [opd] `teacher_model` |
 | Prompts | DeepMath-103K, the `question` column alone, cut at 1,024 tokens | [opd] `dataset="deepmath"`; [data] `row["question"]`, `max_prompt_tokens=1024` |
 | Batch | 512 prompts × 4 samples, one update a step | [readme-opd] `groups_per_batch=512`; [opd] `group_size=4`, `num_substeps=1`; [blog] 150 steps is about 77K prompts |
 | Steps | 150 | [blog] |
@@ -76,7 +76,7 @@ Script: [`opd.sh`](opd.sh), block `HYPERPARAMETERS`.
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, top-k 20, every 5 steps | this kit's, at [qwen3]'s settings |
 
 Infrastructure: all 8 GPUs of b200-2 for the student (training and generation colocated); the teacher is served
-from h100-2 ([`../teachers/`](../teachers/README.md); before 2026-11-12, 4 GPUs each on one node); micro-batch 2;
+from h100-6 ([`../teachers/`](../teachers/README.md); before 2026-11-12, 4 GPUs each on one node); micro-batch 2;
 checkpoints every 10 steps (the last 2 kept), exports every 50, and the last export goes to the Hub.
 
 ## Run by hand
