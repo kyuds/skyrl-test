@@ -30,7 +30,7 @@ Ruled out:
 
 | Model | Node | Router port | Engines | Serves |
 |---|---|---|---|---|
-| Qwen3-8B | h100-4 | 31000 | 8 × 1 | 1b (student on b200-2) |
+| Qwen3-8B | h100-2 | 31000 | 8 × 1 | 1b (student on b200-2) |
 | Qwen3-32B | h100-5 | 31000 | 4 × 2 GPUs | 2d |
 | Qwen3-32B | h100-7 | 31000 | 4 × 2 GPUs | 2b |
 | M2RL-RL_Math | h100-6 | 31001 | 4 × 1 | 2a, MOPD's math rows |

@@ -46,8 +46,8 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 
 Nine nodes: 2 B200 and 7 H100, 8 GPUs each. h100-5 to h100-7, added on 2026-11-11, only serve teachers to the OPD
 runs on h100-1 to h100-4, whose students take all 8 GPUs of their nodes ([`teachers/`](teachers/README.md)). Since 2026-11-12
-every OPD run has one student node and one teacher node: 1b on b200-2 with Qwen3-8B on h100-4, 2a on h100-2 with RL_Math on
-h100-6. b200-1 exists only as a snapshot since its zone ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand
+every OPD run has one student node and one teacher node: 1b on b200-2 with Qwen3-8B on h100-2, and 1a's eval on h100-6, so
+that 1b does not wait for it; 2a is put off until 1b is going. b200-1 exists only as a snapshot since its zone ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand
 with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and
 1a's SFT keeps running through stage 2.
 
