@@ -46,8 +46,7 @@ EVAL_TEMPERATURE=0.6               # [qwen3]
 EVAL_TOP_P=0.95                    # [qwen3]
 EVAL_TOP_K=20                      # [qwen3]
 # ---- infrastructure, not hyperparameters ----
-STUDENT_GPUS=4                     # the other 4 GPUs run the teacher
-TEACHER_ENGINES=4                  # 1 GPU each
+STUDENT_GPUS=8                     # the whole node: the teacher is served from h100-4 (config.sh, V2_TEACHER_SERVERS)
 MICRO=2                            # sequences per GPU per micro-batch
 # =====================================================================================
 
@@ -59,7 +58,7 @@ else
 fi
 v2_collect < <(
   v2_opd_recipe
-  v2_teacher "$TEACHER" "$TEACHER_ENGINES" 1
+  v2_remote_teacher trainer.teacher qwen3_8b   # $TEACHER, served (../teachers/)
   v2_bookkeeping "['opd','section1','1b','deepmath','teacher:Qwen3-8B']"
 )
 v2_launch opd

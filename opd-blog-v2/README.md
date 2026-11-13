@@ -1,7 +1,7 @@
 # OPD blog v2
 
 The experiments behind the OPD blog post, as planned on 2026-11-10 with Charlie Ruan. Everything runs on GCP spot
-nodes (2 B200 and 7 H100, 8 GPUs each; three of the H100s only serve teachers) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
+nodes (B200 and H100, 8 GPUs each; since 2026-11-12 each OPD run has a student node and a teacher node) with SkyRL pinned at `988d977f` (PR #2679, the OPD stack up to MOPD).
 W&B project `opd-blog-v2` (evals in `opd-blog-v2-evals`), Hub repo `kyuds/opd-blog-v2`.
 
 **Every hyperparameter is in a `HYPERPARAMETERS` block at the top of its run script, each value with the source it
@@ -45,7 +45,9 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 ## The plan
 
 Nine nodes: 2 B200 and 7 H100, 8 GPUs each. h100-5 to h100-7, added on 2026-11-11, only serve teachers to the OPD
-runs on h100-1 to h100-4, whose students take all 8 GPUs of their nodes ([`teachers/`](teachers/README.md)). Three stages, each started by hand
+runs on h100-1 to h100-4, whose students take all 8 GPUs of their nodes ([`teachers/`](teachers/README.md)). Since 2026-11-12
+every OPD run has one student node and one teacher node: 1b on b200-2 with Qwen3-8B on h100-4, 2a on h100-2 with RL_Math on
+h100-6. b200-1 exists only as a snapshot since its zone ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand
 with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and
 1a's SFT keeps running through stage 2.
 

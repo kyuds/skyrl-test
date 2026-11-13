@@ -61,7 +61,7 @@ Script: [`opd.sh`](opd.sh), block `HYPERPARAMETERS`.
 | Setting | Value | Source |
 |---|---|---|
 | Student | 1a's output | [c58e] README: OPD starts from the SFT checkpoint |
-| Teacher | `Qwen/Qwen3-8B`, thinking, 4 engines × 1 GPU | [blog]; [opd] `teacher_model` |
+| Teacher | `Qwen/Qwen3-8B`, thinking, served from h100-4: 8 engines × 1 GPU | [blog]; [opd] `teacher_model` |
 | Prompts | DeepMath-103K, the `question` column alone, cut at 1,024 tokens | [opd] `dataset="deepmath"`; [data] `row["question"]`, `max_prompt_tokens=1024` |
 | Batch | 512 prompts × 4 samples, one update a step | [readme-opd] `groups_per_batch=512`; [opd] `group_size=4`, `num_substeps=1`; [blog] 150 steps is about 77K prompts |
 | Steps | 150 | [blog] |
@@ -75,7 +75,8 @@ Script: [`opd.sh`](opd.sh), block `HYPERPARAMETERS`.
 | Prompt format | Qwen3's chat template, thinking | see "Differences" |
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, top-k 20, every 5 steps | this kit's, at [qwen3]'s settings |
 
-Infrastructure: 4 GPUs for the student (training and generation colocated), 4 for the teacher; micro-batch 2;
+Infrastructure: all 8 GPUs of b200-2 for the student (training and generation colocated); the teacher is served
+from h100-4 ([`../teachers/`](../teachers/README.md); before 2026-11-12, 4 GPUs each on one node); micro-batch 2;
 checkpoints every 10 steps (the last 2 kept), exports every 50, and the last export goes to the Hub.
 
 ## Run by hand
