@@ -34,7 +34,7 @@ the same block as section 2's.
 | Loss | importance sampling; each rollout's token mean, averaged over the batch | [slime] `--calculate-per-token-loss` off; [mean] |
 | In-training eval | AIME 24 and 25, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's |
 
-Infrastructure: all 8 GPUs for the student; the teachers are served from h100-6 (`../teachers/`): RL_Math on 4
+Infrastructure: all 8 GPUs for the student; the teachers are served from h100-2 (`../teachers/`): RL_Math on 4
 engines (shared with 2a), RL_Coding and RL_IF on 2 each; 16 requests in flight per teacher engine;
 `trainer.algorithm.opd.route_key=skyrl_mopd_domain`.
 

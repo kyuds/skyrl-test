@@ -47,12 +47,12 @@ EVAL_TEMPERATURE=0.6               # same
 EVAL_TOP_P=0.95                    # ASSUMED (0-evals/README.md)
 EVAL_TOP_K=-1                      # none given
 # ---- infrastructure, not hyperparameters ----
-STUDENT_GPUS=8                     # the whole node: the teachers are served from h100-6 (../teachers/)
+STUDENT_GPUS=8                     # the whole node: the teachers are served from h100-2 (../teachers/)
 MICRO=1
 # =====================================================================================
 
 STUDENT="$M2RL_SFT"
-# Each domain's expert, served from h100-6 (config.sh, V2_TEACHER_SERVERS): RL_Math on 4 engines (it also serves
+# Each domain's expert, served from h100-2 (config.sh, V2_TEACHER_SERVERS): RL_Math on 4 engines (it also serves
 # 2a), RL_Coding and RL_IF on 2 each.
 v2_collect < <(
   v2_opd_recipe

@@ -56,11 +56,11 @@ with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only
 | b200-1 | `sft_1a`: Qwen3-8B-Base on OpenThoughts-3 (about 1 day) | (still 1a) | eval of 1a, `opd_1b`, its eval |
 | b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up, `opd_2c`, its eval | |
 | h100-1 | eval: M2RL-SFT on AIME | `opd_2b` (Qwen3-32B), its eval | |
-| h100-2 | eval: M2RL-RL_Math on AIME | `opd_2a` (RL_Math), its eval | |
+| h100-2 | eval: M2RL-RL_Math on AIME | serves RL_Math, RL_Coding and RL_IF to MOPD and 2a (since 2026-11-13); `opd_2a` still listed here, needs a node of its own | |
 | h100-3 | eval: Qwen3-8B on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | |
 | h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `mopd_3`, then all six benchmarks | |
 | h100-5 | | serves Qwen3-32B to 2d | |
-| h100-6 | | serves RL_Math to 2a and MOPD, RL_Coding and RL_IF to MOPD | |
+| h100-6 | | served Qwen3-8B to 1b (2026-11-13 to 14) | |
 | h100-7 | | serves Qwen3-32B to 2b | |
 
 What each OPD run waits for:
