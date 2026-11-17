@@ -9,6 +9,8 @@ from Qwen3-8B in about 150 steps (70%). This section recreates both steps.
 | `eval_sft_1a` | 3 | h100-6 | 1a at 64 samples (`../0-evals`), before 1b | 60% |
 | `opd_1b_ot3sft8b_from_qwen3_8b` | 3 | b200-2, teacher on h100-6 | 1b: OPD of 1a from Qwen3-8B | 70% |
 | `eval_opd_1b_final` | 3 | b200-2 | 1b's last export at 64 samples | 70% |
+| `eval_sft_1a_tml` | 2 | b200-2, before 2c | 1a again, at Thinking Machines' sampling (`tml` preset) | 60% |
+| `eval_opd_1b_final_tml` | 2 | b200-2, before 2c | 1b's last export again, at Thinking Machines' sampling | 70% |
 
 The teacher is Qwen3-8B in thinking mode. The post presents Qwen3-32B, but says it actually used Qwen3-8B because it
 performed slightly better.
@@ -125,7 +127,10 @@ bash skyrl-test/opd-blog-v2/1-tml/opd.sh --smoke
   than 16,384 tokens. Almost every unfinished row is cut at 16,384, so few rows differ.
 - The answer starts `<think>\n` (Qwen3's layout) instead of OpenThoughts-3's `<think> `, so the student's format matches
   its teacher's.
-- Their AIME settings are not in the blog; this kit uses the Qwen settings of `../0-evals` for every section 1 model.
+- Their AIME settings are not in the blog, and the cookbook released with it has no AIME eval. This kit scores every
+  section 1 model with the Qwen settings of `../0-evals`, and 1a and 1b once more with the `tml` preset: temperature
+  1.0, no top-p or top-k, the only settings Thinking Machines wrote down (for the later Qwen3.5 recipe;
+  `../0-evals/README.md`, "The TML preset").
 - Their training ran on Tinker (LoRA for most results; the 60% and 70% are full fine-tuning per the blog).
 
 ## Risks

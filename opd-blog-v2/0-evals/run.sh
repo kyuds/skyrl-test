@@ -4,14 +4,14 @@
 #   bash skyrl-test/opd-blog-v2/common/job.sh eval_qwen3_8b_math       # as orchestrate.sh runs it
 #   bash skyrl-test/opd-blog-v2/0-evals/run.sh <job> <model> <preset> <benches> [--smoke]
 #     <model>    a Hub id, kit:<SFT job> (its output, from the Hub if not on this node), run:<job> (its last export)
-#     <preset>   qwen or m2rl: the authors' generation settings, in HYPERPARAMETERS below
+#     <preset>   qwen or m2rl: the authors' generation settings; tml: Thinking Machines' sampling (HYPERPARAMETERS)
 #     <benches>  comma-separated names or sets: math (aime24, aime25), code (lcb_v5, lcb_v6), if (ifeval, ifbench), all
 #   --smoke: 2 samples a problem, 512-token answers, W&B project opd-blog-v2-smoke. It checks the plumbing, not scores.
 # Everything lands in ~/opd-store/evals/<job>/; a rerun reuses whatever step already finished.
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
 job="${1:?usage: run.sh <job> <model> <preset> <benches> [--smoke]}"
-spec="${2:?model}"; preset="${3:?preset: qwen or m2rl}"; benches="${4:?benches}"
+spec="${2:?model}"; preset="${3:?preset: qwen, m2rl or tml}"; benches="${4:?benches}"
 shift 4
 v2_init "$job" "$@"
 # ================================== HYPERPARAMETERS ==================================
@@ -21,7 +21,14 @@ v2_init "$job" "$@"
 #   [m2rl]   M2RL paper (https://arxiv.org/abs/2602.12566), appendix A, "Evaluation": 32K tokens, temperature 0.6,
 #            Avg@K with K = 64 for AIME, 8 for LiveCodeBench v5, 1 for v6, 4 for IFEval, 1 for IFBench. Top-p is not
 #            given for these evals; 0.95 is ASSUMED from the same appendix's GenRM settings.
-# The samples per problem (K) are in benchmarks.py (BENCH_SAMPLES), the same for both presets.
+#   [tml]    Thinking Machines' blog (https://thinkingmachines.ai/blog/on-policy-distillation/) gives no eval settings,
+#            and the cookbook released with it (330b73d8d7) has no AIME eval. The cookbook's README states them only
+#            after its move to Qwen3.5 (https://github.com/thinking-machines-lab/tinker-cookbook/commit/ca232b0844):
+#            "temperature=1.0, top_p=1.0, top_k=-1, and max_tokens=64000", Tinker's sampling defaults
+#            (https://github.com/thinking-machines-lab/tinker/blob/2c9f564c9f7d9236a0659da89781c09c6509b950/src/tinker/types/sampling_params.py#L18-L24).
+#            ASSUMED to be how the blog's Qwen3-8B numbers were sampled too. Section 1's models only, as a check of
+#            how far the qwen preset's numbers move with the sampling.
+# The samples per problem (K) are in benchmarks.py (BENCH_SAMPLES), the same for every preset.
 case "$preset" in
   qwen) TEMP=0.6                   # [qwen3]
         TOP_P=0.95                 # [qwen3]
@@ -31,11 +38,17 @@ case "$preset" in
         if [[ $benches == math || $benches == aime24 || $benches == aime25 || $benches == aime24,aime25 ]]; then
           MAX_TOKENS=38912         # [qwen3]
         fi ;;
+  tml)  TEMP=1.0                   # [tml]
+        TOP_P=1.0                  # [tml]
+        TOP_K=-1                   # [tml]
+        MAX_TOKENS=38912 ;;        # not [tml]'s 64,000: Qwen3-8B's context is 40,960, so 64,000 would need YaRN, which
+                                   # the qwen preset does not use either. The qwen preset's AIME length, so only the
+                                   # sampling differs.
   m2rl) TEMP=0.6                   # [m2rl]
         TOP_P=0.95                 # ASSUMED (see above)
         TOP_K=-1                   # [m2rl] none given
         MAX_TOKENS=32768 ;;        # [m2rl] "32K"
-  *) echo "unknown preset: $preset (qwen or m2rl)" >&2; exit 2 ;;
+  *) echo "unknown preset: $preset (qwen, m2rl or tml)" >&2; exit 2 ;;
 esac
 # Thinking on for both: each model's own chat template, enable_thinking=True ([qwen3], [m2rl]).
 # ---- infrastructure ----

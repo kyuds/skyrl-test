@@ -54,7 +54,7 @@ with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only
 | Node | Stage 1: evals, data, SFT (no deps) | Stage 2: OPD, once its evals are done | Stage 3: after 1a |
 |---|---|---|---|
 | b200-1 | `sft_1a`: Qwen3-8B-Base on OpenThoughts-3 (about 1 day) | (still 1a) | eval of 1a, `opd_1b`, its eval |
-| b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up, `opd_2c`, its eval | |
+| b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up; 1a's and 1b's evals at Thinking Machines' sampling; `opd_2c`, its eval | |
 | h100-1 | eval: M2RL-SFT on AIME | `opd_2b` (Qwen3-32B), its eval | |
 | h100-2 | eval: M2RL-RL_Math on AIME | serves RL_Math, RL_Coding and RL_IF to MOPD and 2a (since 2026-11-13); `opd_2a` still listed here, needs a node of its own | |
 | h100-3 | eval: Qwen3-8B on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | |

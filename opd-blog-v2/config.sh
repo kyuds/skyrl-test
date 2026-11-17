@@ -72,6 +72,8 @@ v2_teacher_field() { echo "$V2_TEACHER_SERVERS" | awk -v k="$1" -v c="$2" '$1 ==
 # common/job.sh runs a job by name and records it in ~/opd-store/jobs/; a job that is done is never run again.
 # Every OPD run waits for its teacher's eval and its student's (README.md, "The plan"). A serve_teachers_* job never
 # ends: it serves until stopped. The runs that score against it wait, at launch, until it answers.
+# eval_sft_1a_tml and eval_opd_1b_final_tml (section 1's models at Thinking Machines' sampling, 0-evals/README.md)
+# sit in b200-2's stage 2, ahead of 2c, so one chain runs them and then 2c.
 V2_JOBS="${V2_JOBS:-
 1 b200-2 sft_1a_qwen3_8b_base_ot3             -                                       1-tml/sft.sh
 1 b200-2 eval_qwen3_32b_math                  -                                       0-evals/run.sh eval_qwen3_32b_math Qwen/Qwen3-32B qwen math
@@ -86,6 +88,8 @@ V2_JOBS="${V2_JOBS:-
 2 h100-2 serve_teachers_h100_2                -                                       teachers/serve.sh h100-2
 2 h100-7 serve_teachers_h100_7                -                                       teachers/serve.sh h100-7
 2 b200-2 sft_2c_m2rl_sft_warmup               traces_2c_qwen3_32b                     2-alignment/sft_2c.sh
+2 b200-2 eval_sft_1a_tml                      sft_1a_qwen3_8b_base_ot3                0-evals/run.sh eval_sft_1a_tml kit:sft_1a_qwen3_8b_base_ot3 tml math
+2 b200-2 eval_opd_1b_final_tml                opd_1b_ot3sft8b_from_qwen3_8b           0-evals/run.sh eval_opd_1b_final_tml run:opd_1b_ot3sft8b_from_qwen3_8b tml math
 2 b200-2 opd_2c_m2rl_warmup_from_qwen3_32b    sft_2c_m2rl_sft_warmup,eval_qwen3_32b_math,eval_m2rl_sft_math 2-alignment/opd.sh 2c
 2 b200-2 eval_opd_2c_final                    opd_2c_m2rl_warmup_from_qwen3_32b       0-evals/run.sh eval_opd_2c_final run:opd_2c_m2rl_warmup_from_qwen3_32b m2rl math
 2 h100-1 opd_2b_m2rl_sft_from_qwen3_32b       eval_qwen3_32b_math,eval_m2rl_sft_math  2-alignment/opd.sh 2b

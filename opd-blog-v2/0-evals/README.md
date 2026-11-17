@@ -20,6 +20,10 @@ Stage 1, before anything trains against these models:
 Later stages: `eval_sft_1a` on b200-1 before 1b (target: Thinking Machines' 60% on AIME 2024), and one
 `eval_<run>_final` after every OPD run, on its last export, on the node that trained it.
 
+`eval_sft_1a_tml` and `eval_opd_1b_final_tml` score 1a and 1b again with the TML preset (below): the same AIME files,
+64 samples and 38,912 tokens, but Thinking Machines' sampling. They show how far section 1's numbers depend on the
+sampling, since the blog does not say how its 60% and 70% were measured. They run on b200-2 ahead of 2c.
+
 **Pass mark:** within about 3 points of the published number. AIME's 30 problems at 64 samples each give a standard
 error near 1 point, so 3 points is a real difference. A model that misses is not used until the gap is understood:
 first check the cut rate (answers that hit the length limit) and the grader, then the settings below.
@@ -75,16 +79,24 @@ on this harness, not the published ones. Stage 2 started on 2026-11-10 on that b
 Script: [`run.sh`](run.sh), block `HYPERPARAMETERS`; the samples per problem are `BENCH_SAMPLES` in
 [`benchmarks.py`](benchmarks.py).
 
-| | Qwen preset (`qwen`) | M2RL preset (`m2rl`) |
-|---|---|---|
-| Source | [qwen3] section 4.6, thinking mode | [m2rl] appendix A, "Evaluation" |
-| Temperature | 0.6 | 0.6 |
-| Top-p | 0.95 | 0.95, ASSUMED (given only for the paper's GenRM study, same appendix) |
-| Top-k | 20 | none |
-| Answer length | 38,912 tokens for AIME, 32,768 otherwise | 32,768 tokens ("32K") |
-| Samples per problem | 64 for AIME ("For each question, we sample 64 times") | 64 AIME, 8 LiveCodeBench v5, 1 v6, 4 IFEval, 1 IFBench |
-| Thinking | on (the chat template's default) | on |
-| Used for | Qwen3-8B, Qwen3-32B, and section 1's models | M2RL's models and every section 2 and 3 model |
+| | Qwen preset (`qwen`) | M2RL preset (`m2rl`) | TML preset (`tml`) |
+|---|---|---|---|
+| Source | [qwen3] section 4.6, thinking mode | [m2rl] appendix A, "Evaluation" | [tml-readme], Tinker's defaults ([tinker-sampling]) |
+| Temperature | 0.6 | 0.6 | 1.0 |
+| Top-p | 0.95 | 0.95, ASSUMED (given only for the paper's GenRM study, same appendix) | 1.0 |
+| Top-k | 20 | none | none |
+| Answer length | 38,912 tokens for AIME, 32,768 otherwise | 32,768 tokens ("32K") | 38,912 tokens, not [tml-readme]'s 64,000 (below) |
+| Samples per problem | 64 for AIME ("For each question, we sample 64 times") | 64 AIME, 8 LiveCodeBench v5, 1 v6, 4 IFEval, 1 IFBench | 64 for AIME, as the others (not stated by Thinking Machines) |
+| Thinking | on (the chat template's default) | on | on |
+| Used for | Qwen3-8B, Qwen3-32B, and section 1's models | M2RL's models and every section 2 and 3 model | section 1's models again, as a check |
+
+**The TML preset.** Thinking Machines' blog states no eval settings: no sampling, length, sample count or grader
+(verified on 2026-11-17 against the whole post). The cookbook released with it ([c330]) has no AIME eval at all: the
+OPD recipe's DeepMath data has no test split and the SFT recipe passes no evaluators. The only settings Thinking
+Machines wrote down are in the cookbook's README after it moved to Qwen3.5-9B ([tml-readme]), for those LoRA runs:
+temperature 1.0, top-p 1.0, no top-k, 64,000 tokens, which are Tinker's sampling defaults. That the blog's Qwen3-8B
+numbers were sampled the same way is ASSUMED. The length stays at 38,912: Qwen3-8B's context is 40,960 tokens, so
+64,000 would need YaRN, and keeping the qwen preset's length leaves the sampling as the only difference.
 
 The score is the mean over all samples (Avg@K), in percent. A model's own context caps its answers: `generate.py`
 shortens a request that would not fit. Section 2's runs all use the M2RL preset, so they compare on one setting; the
@@ -165,3 +177,6 @@ published numbers, as measured above.
 
 [qwen3]: https://arxiv.org/abs/2505.09388
 [m2rl]: https://arxiv.org/abs/2602.12566
+[c330]: https://github.com/thinking-machines-lab/tinker-cookbook/tree/330b73d8d763b0f65bcf04e643cc6f082e002554/tinker_cookbook/recipes/distillation
+[tml-readme]: https://github.com/thinking-machines-lab/tinker-cookbook/blob/ca232b0844/tinker_cookbook/recipes/distillation/README.md
+[tinker-sampling]: https://github.com/thinking-machines-lab/tinker/blob/2c9f564c9f7d9236a0659da89781c09c6509b950/src/tinker/types/sampling_params.py#L18-L24
