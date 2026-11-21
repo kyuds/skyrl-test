@@ -1,8 +1,10 @@
 # Teacher servers: OPD teachers on nodes of their own
 
-Since 2026-11-11, the OPD runs on the H100s (2a, 2b, 2d and MOPD) score with teachers served from three extra H100
-nodes, h100-5 to h100-7. Each run's student has all 8 GPUs of its node. 2c, on b200-2, still runs its teacher on 4 of
-its own GPUs.
+1b and MOPD score with teachers served from a node of their own, so each student has all 8 GPUs of its node: Qwen3-8B
+on h100-6 for 1b, the three M2RL experts on h100-2 for MOPD. Section 2's runs keep their teacher on 4 of their own
+node's 8 GPUs instead (`../2-alignment/README.md`), and expect the speed measured below for that layout: with three
+nodes left for 2a, 2b and 2d, one run per node finishes all three sooner than served teachers would, which fit one
+run at a time on the two H100 nodes.
 
 ## Why
 
@@ -31,9 +33,7 @@ Ruled out:
 | Model | Node | Router port | Engines | Serves |
 |---|---|---|---|---|
 | Qwen3-8B | h100-6 | 31000 | 8 × 1 | 1b (student on b200-2); h100-2 until its preemption on 2026-11-13 |
-| Qwen3-32B | h100-5 | 31000 | 4 × 2 GPUs | 2d |
-| Qwen3-32B | h100-7 | 31000 | 4 × 2 GPUs | 2b |
-| M2RL-RL_Math | h100-2 | 31001 | 4 × 1 | 2a, MOPD's math rows |
+| M2RL-RL_Math | h100-2 | 31001 | 4 × 1 | MOPD's math rows |
 | M2RL-RL_Coding | h100-2 | 31002 | 2 × 1 | MOPD's code rows |
 | M2RL-RL_IF | h100-2 | 31003 | 2 × 1 | MOPD's IF rows |
 
@@ -60,19 +60,18 @@ Each served teacher scores up to 18,433 tokens (`V2_TEACHER_MAX_LEN`), sections 
 
 ## Running it
 
-`orchestrate.sh run 2 --yes` starts the servers and the runs together; the runs wait for the servers. The PROGRESS
+`orchestrate.sh run 3 --yes` starts the servers and MOPD together; the runs wait for the servers. The PROGRESS
 column of `orchestrate.sh` shows each server's last check, e.g. `serving qwen3_32b:31000 ok (08:05Z)`. Logs:
 
-- `~/opd-store/logs/serve_teachers_h100_5.log` on the node: the launch, then one line per teacher once it is up.
-- `~/opd-store/logs/skyrl/serve_teachers_h100_5/`: vLLM's and the router's own logs.
+- `~/opd-store/logs/serve_teachers_h100_2.log` on the node: the launch, then one line per teacher once it is up.
+- `~/opd-store/logs/skyrl/serve_teachers_h100_2/`: vLLM's and the router's own logs.
 
-Stop a server with `orchestrate.sh stop h100-5`. Start it again with `orchestrate.sh run 2 --only h100-5 --yes`.
+Stop a server with `orchestrate.sh stop h100-2`. Start it again with `orchestrate.sh run 3 --only h100-2 --yes`.
 
 ## What could go wrong
 
-- **A teacher node stops its runs.** If h100-5 or h100-7 is preempted, 2d or 2b fails on its next teacher request once
-  the retries run out. If h100-6 is, 2a and MOPD do. Each resumes from its last checkpoint (every 10 steps) once the
-  server is back:
+- **A teacher node stops its runs.** If h100-2 is preempted, MOPD fails on its next teacher request once the retries
+  run out; if h100-6 is, 1b does. Each resumes from its last checkpoint (every 5 steps) once the server is back:
   1. Restart the node: `gcp/02_setup_nodes.sh --only <node>`, or `gcp/migrate.sh` if its zone has no capacity.
   2. Start its server: `orchestrate.sh run 2 --only <node> --yes`.
   3. Rerun the failed runs with `orchestrate.sh run 2 --yes`.
@@ -86,10 +85,10 @@ Stop a server with `orchestrate.sh stop h100-5`. Start it again with `orchestrat
 - **Qwen3-32B is the slowest teacher.** It started as one node shared by 2b and 2d (estimated at about 30% of its
   peak). Measured on 2026-11-11, it was saturated: with 2d alone, each of its 4 engines had requests queued in about
   half of vLLM's 10-second windows, ran only 2 or 3 at once, and averaged about 3,400 prompt tokens a second. 2d's
-  answers took 640 to 900 s a step to generate and score, against 2a's 460 to 530. So 2b got its own node, h100-7.
-  2a and MOPD still share RL_Math, which is far from busy.
+  answers took 640 to 900 s a step to generate and score, against 2a's 460 to 530. On its own node, 2d's Qwen3-32B
+  now has 2 engines, half of the 4 that were saturated, so 2d is the section-2 run most likely to be slow.
 - **Cross-region traffic.** Each run step sends its 1,024 answers to the teacher and gets the scores back, roughly
-  1 GB a step across regions. That is an estimate, not a measurement: about 1.6 TB over the four runs, billed as
+  1 GB a step across regions. That is an estimate, not a measurement: about 0.3 TB over MOPD's 300 steps, billed as
   network egress at roughly $0.01 to $0.08 per GB.
 - **Not the first launch's layout.** The runs restarted from step 0 with 8 student GPUs. A checkpoint saved on 4 GPUs
   does not load on 8 (one file per GPU, named by GPU count), so the first launch's 8 steps were set aside. The recipe

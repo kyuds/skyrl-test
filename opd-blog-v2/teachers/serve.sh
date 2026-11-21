@@ -3,12 +3,12 @@
 # V2_TEACHER_SERVERS puts on this node, with SkyRL's own teacher launch (teachers/serve.py), until it is stopped:
 # the job never finishes. The OPD runs on other nodes score against it (README.md in this folder).
 # From ~/SkyRL:
-#   bash skyrl-test/opd-blog-v2/common/job.sh serve_teachers_h100_5     # as orchestrate.sh runs it
-#   bash skyrl-test/opd-blog-v2/orchestrate.sh stop h100-5              # from the Mac: stops it
+#   bash skyrl-test/opd-blog-v2/common/job.sh serve_teachers_h100_2     # as orchestrate.sh runs it
+#   bash skyrl-test/opd-blog-v2/orchestrate.sh stop h100-2              # from the Mac: stops it
 # --smoke is accepted and changes nothing: a served teacher is the same for a smoke run as for a real one.
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
-node="${1:?the node whose teachers to serve, e.g. h100-5}"; shift
+node="${1:?the node whose teachers to serve, e.g. h100-2}"; shift
 v2_init "serve_teachers_${node//-/_}" "$@"
 RUN="serve_teachers_${node//-/_}"   # the same with --smoke: a smoke run's OPD scores against the real servers
 

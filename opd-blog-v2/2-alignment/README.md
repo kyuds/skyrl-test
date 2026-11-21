@@ -25,9 +25,9 @@ against 0.11 to RL_Math. Qwen3-32B's chat template renders the student's prompts
 | `traces_2c_qwen3_32b` | 1 | b200-2 | 2c's warm-up data: Qwen3-32B's answers |
 | `sft_2c_m2rl_sft_warmup` | 2 | b200-2 | 2c's warm-up SFT |
 | `opd_2c_m2rl_warmup_from_qwen3_32b` | 2 | b200-2 | 2c |
-| `opd_2b_m2rl_sft_from_qwen3_32b` | 2 | h100-1 | 2b |
-| `opd_2d_m2rl_sft_from_qwen3_32b_clip` | 2 | h100-3 | 2d |
-| `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-2 | 2a |
+| `opd_2b_m2rl_sft_from_qwen3_32b` | 2 | b200-2 | 2b, after 2c |
+| `opd_2d_m2rl_sft_from_qwen3_32b_clip` | 2 | h100-2 | 2d |
+| `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-4 | 2a |
 | `eval_opd_2*_final` | | | each run's last export at 64 samples, M2RL's settings |
 
 Each OPD run waits for its teacher's and its student's evals (`../0-evals`): Qwen3-32B or RL_Math, and M2RL-SFT.
@@ -53,10 +53,11 @@ same block with three.
 | 2d's clip | `advantage_clip_min=-2.3` nats | this kit's (below) |
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's, at M2RL's eval settings (`../0-evals`) |
 
-Infrastructure: for 2a, 2b and 2d, all 8 GPUs for the student (training and generation colocated), with the teacher
-served from a node of its own (`../teachers/`): Qwen3-32B from h100-7 for 2b and from h100-5 for 2d (4 engines of 2
-GPUs each), RL_Math from h100-2. For 2c, on b200-2, 4 GPUs for the student and 4 for its own Qwen3-32B. Micro-batch 1;
-checkpoints every 10 steps (the last 2 kept), exports every 50, and the last export goes to the Hub.
+Infrastructure: one node per run, 4 GPUs for the student (training and generation colocated) and 4 for its teacher:
+RL_Math on 4 engines of 1 GPU for 2a (h100-4); Qwen3-32B on 2 engines of 2 GPUs for 2d (h100-2), and on 4 engines of 1
+GPU on b200-2 for 2c and then 2b. That puts 2a, 2b and 2d on the three nodes left after MOPD at once; with served
+teachers, the two H100 nodes would fit one run at a time. Micro-batch 1; checkpoints every 5 steps (the last 2 kept),
+exports every 50, and the last export goes to the Hub.
 
 ## 2c's warm-up
 

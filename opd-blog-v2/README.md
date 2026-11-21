@@ -44,36 +44,37 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 
 ## The plan
 
-Nine nodes: 2 B200 and 7 H100, 8 GPUs each. h100-5 to h100-7, added on 2026-11-11, only serve teachers to the OPD
-runs on h100-1 to h100-4, whose students take all 8 GPUs of their nodes ([`teachers/`](teachers/README.md)). Since 2026-11-12
-every OPD run has one student node and one teacher node: 1b on b200-2 with Qwen3-8B on h100-6 (on h100-2 until it was
-preempted on 2026-11-13; the RL teachers moved to h100-2 in exchange); 2a is put off until 1b is going. b200-1 exists only as a snapshot since its zone ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand
+Nine nodes: 2 B200 and 7 H100, 8 GPUs each. 1b and MOPD score with teachers served from a node of their own, so
+their students take all 8 GPUs of theirs ([`teachers/`](teachers/README.md)): 1b on b200-2 with Qwen3-8B on h100-6 (on
+h100-2 until it was preempted on 2026-11-13; the RL teachers moved to h100-2 in exchange), MOPD on h100-4 with the RL
+teachers on h100-2. Section 2's runs keep their teacher on 4 of their own node's 8 GPUs, so after MOPD the three nodes
+left run 2a, 2b and 2d at once: 2a on h100-4, 2d on h100-2, 2b on b200-2 after 2c. h100-1, h100-3, h100-5 and h100-7
+have no jobs left. b200-1 exists only as a snapshot since its zone ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand
 with `orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and
 1a's SFT keeps running through stage 2.
 
-| Node | Stage 1: evals, data, SFT (no deps) | Stage 2: OPD, once its evals are done | Stage 3: after 1a |
+| Node | Stage 1: evals, data, SFT (no deps) | Stage 2: OPD, once its evals are done | Stage 3: after 1a; MOPD |
 |---|---|---|---|
 | b200-1 | `sft_1a`: Qwen3-8B-Base on OpenThoughts-3 (about 1 day) | (still 1a) | eval of 1a, `opd_1b`, its eval |
-| b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up; 1a's and 1b's evals at Thinking Machines' sampling; `opd_2c`, its eval | |
-| h100-1 | eval: M2RL-SFT on AIME | `opd_2b` (Qwen3-32B), its eval | |
-| h100-2 | eval: M2RL-RL_Math on AIME | serves RL_Math, RL_Coding and RL_IF to MOPD and 2a (since 2026-11-13); `opd_2a` still listed here, needs a node of its own | |
-| h100-3 | eval: Qwen3-8B on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | |
-| h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `mopd_3`, then all six benchmarks | |
-| h100-5 | | serves Qwen3-32B to 2d | |
+| b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up; 1a's and 1b's evals at Thinking Machines' sampling; `opd_2c`, its eval; `opd_2b` (Qwen3-32B), its eval | |
+| h100-1 | eval: M2RL-SFT on AIME | | |
+| h100-2 | eval: M2RL-RL_Math on AIME | `opd_2d` (Qwen3-32B, clipped), its eval | serves RL_Math, RL_Coding and RL_IF to MOPD |
+| h100-3 | eval: Qwen3-8B on AIME | | |
+| h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `opd_2a` (RL_Math), its eval | `mopd_3`, then all six benchmarks |
 | h100-6 | | served Qwen3-8B to 1b (2026-11-13 to 14) | |
-| h100-7 | | serves Qwen3-32B to 2b | |
 
 What each OPD run waits for:
 
 | Run | Node | Waits for |
 |---|---|---|
-| 2b, 2d | h100-1, h100-3 | Qwen3-32B's eval (b200-2) and M2RL-SFT's (h100-1) |
-| 2a | h100-2 | RL_Math's eval and M2RL-SFT's |
+| 2b, 2d | b200-2, h100-2 | Qwen3-32B's eval (b200-2) and M2RL-SFT's (h100-1) |
+| 2a | h100-4 | RL_Math's eval and M2RL-SFT's |
 | 2c | b200-2 | its warm-up, which waits for Qwen3-32B's answers; and the same two evals as 2b |
 | MOPD | h100-4 | all five M2RL evals |
 
-The runs on h100-1 to h100-4 also wait, at launch, until their teacher's server answers.
 | 1b | b200-1 | 1a's SFT (and its eval, run first on the same node) and Qwen3-8B's eval (h100-3) |
+
+1b and MOPD also wait, at launch, until their teacher's server answers.
 
 Why this layout:
 
@@ -94,7 +95,9 @@ Why this layout:
 hours in); Qwen3-32B's answers take several hours on b200-2; 1a about a day (5 billion tokens, estimated at 35% GPU
 use). Those are estimates. Measured on 2026-11-18 to 20, an OPD step takes about 22 minutes with its eval for 2c
 (b200-2: 4 student GPUs, its own teacher on the other 4) and 23 to 24 for MOPD (8 student GPUs on h100-4, teachers
-served from h100-2), so a 250-step run takes about 4 days and MOPD's 300 steps about 5. The in-training AIME eval
+served from h100-2), so a 250-step run takes about 4 days and MOPD's 300 steps about 5. 2a and 2d run 2c's layout on
+H100s, which ran about 35 minutes a step on 2026-11-11 (`teachers/README.md`): about 6 days for 250 steps (an
+estimate). The in-training AIME eval
 runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s, roughly 10 hours over a 250-step run
 (estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in each run script change it.
 
