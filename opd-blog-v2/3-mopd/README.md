@@ -25,7 +25,7 @@ the same block as section 2's.
 | Teachers | RL_Math, RL_Coding, RL_IF, each row routed to its domain's | [paper] (five teachers: these three plus science and agent); [route] |
 | Prompts | 57,800: math 22,056, code 19,169, IF 16,575 | [paper] section 3.2: the multi-task RLVR prompts; the proposal keeps three domains |
 | Batch | 256 prompts × 4 samples, one update per step | [paper] appendix A; [script] |
-| Steps | 300 | [paper] appendix A; [script] `--num-rollout 400` is not used, to save GPU time: the in-training AIME was flat from about step 50. The run started with a limit of 400 and resumed with 300 near step 285; the learning rate is constant, so it trains as a 300-step run would |
+| Steps | 300 | [paper] appendix A; [script] `--num-rollout 400` is not used, to save GPU time: the in-training AIME was flat from about step 50. The run was launched with a limit of 400 and stopped after step 300's export and eval; the learning rate is constant, so it trained as a 300-step run would |
 | Learning rate | 1e-6, constant, no warmup | [paper]; [script] `--lr 1e-6 --lr-decay-style constant` |
 | Optimizer | Adam, betas 0.9 and 0.98, weight decay 0.1 | [script] |
 | Grad clip | 1.0 | [slime] `--clip-grad` default |

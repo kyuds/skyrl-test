@@ -43,7 +43,7 @@ same block with three.
 | Teacher | 2a: `Jackwang111/M2RL-RL_Math`, 4 engines × 1 GPU. 2b to 2d: `Qwen/Qwen3-32B`, thinking, 2 engines × 2 GPUs on H100s (4 × 1 on B200s) | the proposal |
 | Prompts | M2RL's math set, 22,056 (`../data/README.md`), up to 2,048 tokens | [paper] appendix A; [script] `--rollout-max-prompt-len 2048` |
 | Batch | 256 prompts × 4 samples, one update per step | [paper]: batch size 256, group size 4, "gradient update is conducted per 1024 rollouts"; [script] |
-| Steps | 250 | fewer than [script] `--num-rollout 400` and the paper's appendix A (300), to save GPU time: 2c's in-training AIME was flat from about step 110. 2c started with a limit of 400 and resumed with 250 near step 190; the learning rate is constant, so it trains as a 250-step run would |
+| Steps | 250 | fewer than [script] `--num-rollout 400` and the paper's appendix A (300), to save GPU time: 2c's in-training AIME was flat from about step 110. 2c was launched with a limit of 400 and resumed with 250 at step 210; the learning rate is constant, so it trains as a 250-step run would |
 | Learning rate | 1e-6, constant, no warmup | [paper]; [script] `--lr 1e-6 --lr-decay-style constant` |
 | Optimizer | Adam, betas 0.9 and 0.98, weight decay 0.1 | [script] `--adam-beta1 0.9 --adam-beta2 0.98 --weight-decay 0.1` |
 | Grad clip | 1.0 | [slime] `--clip-grad` default, which the script leaves alone |
