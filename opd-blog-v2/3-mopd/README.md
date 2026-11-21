@@ -25,7 +25,7 @@ the same block as section 2's.
 | Teachers | RL_Math, RL_Coding, RL_IF, each row routed to its domain's | [paper] (five teachers: these three plus science and agent); [route] |
 | Prompts | 57,800: math 22,056, code 19,169, IF 16,575 | [paper] section 3.2: the multi-task RLVR prompts; the proposal keeps three domains |
 | Batch | 256 prompts × 4 samples, one update per step | [paper] appendix A; [script] |
-| Steps | 400 | [script] `--num-rollout 400`. The paper's appendix A says 300; the code's number is used |
+| Steps | 300 | [paper] appendix A; [script] `--num-rollout 400` is not used, to save GPU time: the in-training AIME was flat from about step 50. The run started with a limit of 400 and resumed with 300 near step 285; the learning rate is constant, so it trains as a 300-step run would |
 | Learning rate | 1e-6, constant, no warmup | [paper]; [script] `--lr 1e-6 --lr-decay-style constant` |
 | Optimizer | Adam, betas 0.9 and 0.98, weight decay 0.1 | [script] |
 | Grad clip | 1.0 | [slime] `--clip-grad` default |
@@ -55,7 +55,7 @@ Each expert's own score in its domain, from M2RL-SFT's, as measured on 2026-11-1
 Success is recovering most of each expert's gain over M2RL-SFT in its own domain, measured: the gains to recover are
 about 26 / 32 on AIME, 4 / 6 on LiveCodeBench (small, against the paper's 9 / 7) and 14 / 23 on IFEval / IFBench.
 The paper's MT-OPD column is on M2RL's harness and does not compare directly with the measured ones. The paper's MT-OPD row used five
-teachers (with science and agent), and the paper says 300 steps against 400 here, so it is not matched exactly.
+teachers (with science and agent), so it is not matched exactly; the step count (300) is the paper's.
 
 ## Run by hand
 

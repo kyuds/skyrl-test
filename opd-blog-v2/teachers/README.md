@@ -7,7 +7,7 @@ its own GPUs.
 ## Why
 
 The first launch of stage 2 (2026-11-11, 4 GPUs for the student and 4 for its teacher on each node) ran at about 35
-minutes a step with the eval, so 400 steps would have taken 9 to 10 days. The logs showed why:
+minutes a step with the eval, so a 250-step run would have taken 6 days. The logs showed why:
 
 - **The student ran out of KV cache.** Each of its 4 vLLM engines held about 388,000 tokens (99% used), so only 30 to
   60 of its 256 answers ran at once, with 60 to 75 queued.

@@ -90,14 +90,13 @@ Why this layout:
   teacher. Qwen3-32B fits one B200 GPU but needs two H100s.
 - **Every final eval runs on the node that trained the model**, chained after the run, so no export has to move.
 
-**Rough timeline** (none of it measured): stage 1's evals take one to a few hours each, so stage 2 can start a few
-hours in (MOPD several hours in); Qwen3-32B's answers take several hours on b200-2; 1a about a day (5 billion tokens,
-estimated at 35% GPU use); each OPD run 1 to 2 days, the Qwen3-32B-teacher runs on H100s probably the longest. End to
-end, 3 to 4 days, set by 1a then 1b or by 2b and 2d. Measured on 2026-11-11, the first launch of stage 2 (4 student
-GPUs, teacher on the same node) ran about 35 minutes a step with the eval, 9 to 10 days for 400 steps; the runs
-restarted with 8 student GPUs and served teachers, expected to roughly halve that (`teachers/README.md`). The in-training AIME eval runs every 5 steps at 8 samples: about
-10 to 15 minutes each on 4 H100s, roughly 16 hours over a 400-step run (estimated from vLLM's KV-cache limits, not
-measured). `EVAL_EVERY` and `EVAL_N` in each run script change it.
+**Rough timeline**: stage 1's evals take one to a few hours each, so stage 2 can start a few hours in (MOPD several
+hours in); Qwen3-32B's answers take several hours on b200-2; 1a about a day (5 billion tokens, estimated at 35% GPU
+use). Those are estimates. Measured on 2026-11-18 to 20, an OPD step takes about 22 minutes with its eval for 2c
+(b200-2: 4 student GPUs, its own teacher on the other 4) and 23 to 24 for MOPD (8 student GPUs on h100-4, teachers
+served from h100-2), so a 250-step run takes about 4 days and MOPD's 300 steps about 5. The in-training AIME eval
+runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s, roughly 10 hours over a 250-step run
+(estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in each run script change it.
 
 ## Running it
 
@@ -210,8 +209,8 @@ a day or two more. With 6 H100s there is nothing for the extra two to do.
   [`1-tml/README.md`](1-tml/README.md).
 - **1a SFTs on every OpenThoughts-3 domain** (math, code, science), as the cookbook does. `OT3_DOMAINS=math` in
   `1-tml/sft.sh` keeps math only.
-- **Sections 2 and 3 follow M2RL's MT-OPD**: its paper's appendix A and its launch script, pinned at `c94ce97c`. Where
-  they disagree (400 steps in the script, 300 in the paper), the kit follows the script.
+- **Sections 2 and 3 follow M2RL's MT-OPD**: its paper's appendix A and its launch script, pinned at `c94ce97c`, except
+  in length, to save GPU time: section 2 runs 250 steps and section 3 the paper's 300 (the script runs 400).
 - **2c's warm-up uses Qwen3-32B's answers to all 22,056 math prompts**, the set its OPD then trains on, and M2RL's own
   recipe for SFT on teacher answers (MT-OFF: lr 5e-5, batch 512). No paper gives a warm-up recipe.
 - **1a starts from Qwen3-8B-Base with Qwen3-8B's settings files** (`common/fix_base_settings.py`): Qwen3-8B's tokenizer, end
