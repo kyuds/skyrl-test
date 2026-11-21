@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs on the VM, on all 8 GPUs. Section 2's OPD: the student is M2RL-SFT on M2RL's math prompts, with M2RL's MT-OPD
+# Runs on the VM, on all 8 GPUs: 4 for the student, 4 for its teacher. Section 2's OPD: the student is M2RL-SFT on M2RL's math prompts, with M2RL's MT-OPD
 # recipe and one teacher; only the teacher (and, for 2c, the warm-up; for 2d, the clip) changes. See README.md here.
 #   2a  teacher M2RL-RL_Math: RL'd from this very student, so aligned
 #   2b  teacher Qwen3-32B (thinking): stronger, but a different lineage, so misaligned
@@ -59,30 +59,26 @@ EVAL_TEMPERATURE=0.6               # same
 EVAL_TOP_P=0.95                    # ASSUMED (0-evals/README.md)
 EVAL_TOP_K=-1                      # none given
 # ---- infrastructure, not hyperparameters ----
-STUDENT_GPUS=8                     # the whole node: 2a, 2b and 2d score with a teacher served from a node of its
-                                   # own (../teachers/). 2c, on b200-2, keeps its teacher on 4 of its GPUs (below)
+STUDENT_GPUS=4                     # half the node; the teacher runs on the other half (below). One node per run, so
+                                   # 2a, 2b and 2d run at once on the three nodes left (config.sh)
 MICRO=1                            # sequences per GPU per micro-batch
 # =====================================================================================
 
 STUDENT="$M2RL_SFT"
 case "$variant" in
-  2a) TEACHER="$M2RL_MATH"; SERVED=rl_math ;;     # served from h100-2 (config.sh, V2_TEACHER_SERVERS)
-  2b) TEACHER="$QWEN3_32B"; SERVED=qwen3_32b_2b ;;  # served from h100-7, for 2b alone
-  2d) TEACHER="$QWEN3_32B"; SERVED=qwen3_32b ;;     # served from h100-5, for 2d alone
-  2c) TEACHER="$QWEN3_32B"; SERVED=""             # on this node: b200-2's other 4 GPUs, 1 per engine on a B200
-      STUDENT="$(v2_model kit:sft_2c_m2rl_sft_warmup)"; STUDENT_GPUS=4 ;;
+  2a)    TEACHER="$M2RL_MATH" ;;
+  2b|2d) TEACHER="$QWEN3_32B" ;;
+  2c)    TEACHER="$QWEN3_32B"; STUDENT="$(v2_model kit:sft_2c_m2rl_sft_warmup)" ;;
 esac
+# The teacher's engines fill the node's other GPUs, one GPU each, except Qwen3-32B on an H100, which needs two.
+TEACHER_TP=1
+if [[ "$TEACHER" == "$QWEN3_32B" ]]; then TEACHER_TP="$(v2_tp_32b)"; fi
 EXTRA_OPD=()
 if [[ $variant == 2d ]]; then EXTRA_OPD+=("trainer.algorithm.opd.advantage_clip_min=$CLIP_MIN"); fi
 
 v2_collect < <(
   v2_opd_recipe
-  if [[ -n "$SERVED" ]]; then
-    v2_remote_teacher trainer.teacher "$SERVED"
-  else
-    TEACHER_TP="$(v2_tp_32b)"
-    v2_teacher "$TEACHER" $(((8 - STUDENT_GPUS) / TEACHER_TP)) "$TEACHER_TP"
-  fi
+  v2_teacher "$TEACHER" $(((8 - STUDENT_GPUS) / TEACHER_TP)) "$TEACHER_TP"
   v2_bookkeeping "['opd','section2','$variant','nemotron3-nano-rl-math','teacher:${TEACHER#*/}']"
   printf '%s\n' ${EXTRA_OPD[@]+"${EXTRA_OPD[@]}"}
 )
