@@ -75,6 +75,8 @@ v2_teacher_field() { echo "$V2_TEACHER_SERVERS" | awk -v k="$1" -v c="$2" '$1 ==
 # collapsed as 2b did (2-alignment/README.md, "2d's clip"), and its step-50 export is on the Hub. Its job is
 # unfinished, so a row would start it again. Nor have 2e and 2f (h100-2), each stopped at OPD step 1 or 2 on
 # 2026-11-23 because its warm-up's student failed the screen (2-alignment/README.md, "Repairing 2c's warm-up").
+# eval_sft_2c_warmup_math_temperature_1 asks whether that student's loops go away at temperature 1.0 (same section); its
+# model comes from the Hub, so it waits for nothing.
 V2_JOBS="${V2_JOBS:-
 1 b200-2 sft_1a_qwen3_8b_base_ot3             -                                       1-tml/sft.sh
 1 b200-2 eval_qwen3_32b_math                  -                                       0-evals/run.sh eval_qwen3_32b_math Qwen/Qwen3-32B qwen math
@@ -94,6 +96,7 @@ V2_JOBS="${V2_JOBS:-
 2 b200-2 eval_opd_2b_final                    opd_2b_m2rl_sft_from_qwen3_32b          0-evals/run.sh eval_opd_2b_final run:opd_2b_m2rl_sft_from_qwen3_32b m2rl math
 2 h100-4 opd_2a_m2rl_sft_from_m2rl_rl_math    eval_m2rl_rl_math_math,eval_m2rl_sft_math 2-alignment/opd.sh 2a
 2 h100-4 eval_opd_2a_final                    opd_2a_m2rl_sft_from_m2rl_rl_math       0-evals/run.sh eval_opd_2a_final run:opd_2a_m2rl_sft_from_m2rl_rl_math m2rl math
+2 h100-2 eval_sft_2c_warmup_math_temperature_1 -                                     0-evals/run.sh eval_sft_2c_warmup_math_temperature_1 kit:sft_2c_m2rl_sft_warmup m2rl_temperature_1 math
 3 h100-2 serve_teachers_h100_2                -                                       teachers/serve.sh h100-2
 3 h100-4 mopd_3_m2rl_sft_from_math_code_if    eval_m2rl_sft_math,eval_m2rl_rl_math_math,eval_m2rl_sft_code_if,eval_m2rl_rl_coding_code,eval_m2rl_rl_if_if 3-mopd/run.sh
 3 h100-4 eval_mopd_3_final                    mopd_3_m2rl_sft_from_math_code_if       0-evals/run.sh eval_mopd_3_final run:mopd_3_m2rl_sft_from_math_code_if m2rl all

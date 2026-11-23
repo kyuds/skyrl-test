@@ -4,14 +4,15 @@
 #   bash skyrl-test/opd-blog-v2/common/job.sh eval_qwen3_8b_math       # as orchestrate.sh runs it
 #   bash skyrl-test/opd-blog-v2/0-evals/run.sh <job> <model> <preset> <benches> [--smoke]
 #     <model>    a Hub id, kit:<SFT job> (its output, from the Hub if not on this node), run:<job> (its last export)
-#     <preset>   qwen or m2rl: the authors' generation settings; tml: Thinking Machines' sampling (HYPERPARAMETERS)
+#     <preset>   qwen or m2rl: the authors' generation settings; tml: Thinking Machines' sampling; m2rl_temperature_1:
+#                m2rl's length at the sampling section 2's OPD trains with (HYPERPARAMETERS)
 #     <benches>  comma-separated names or sets: math (aime24, aime25), code (lcb_v5, lcb_v6), if (ifeval, ifbench), all
 #   --smoke: 2 samples a problem, 512-token answers, W&B project opd-blog-v2-smoke. It checks the plumbing, not scores.
 # Everything lands in ~/opd-store/evals/<job>/; a rerun reuses whatever step already finished.
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
 job="${1:?usage: run.sh <job> <model> <preset> <benches> [--smoke]}"
-spec="${2:?model}"; preset="${3:?preset: qwen, m2rl or tml}"; benches="${4:?benches}"
+spec="${2:?model}"; preset="${3:?preset: qwen, m2rl, tml or m2rl_temperature_1}"; benches="${4:?benches}"
 shift 4
 v2_init "$job" "$@"
 # ================================== HYPERPARAMETERS ==================================
@@ -28,6 +29,9 @@ v2_init "$job" "$@"
 #            (https://github.com/thinking-machines-lab/tinker/blob/2c9f564c9f7d9236a0659da89781c09c6509b950/src/tinker/types/sampling_params.py#L18-L24).
 #            ASSUMED to be how the blog's Qwen3-8B numbers were sampled too. Section 1's models only, as a check of
 #            how far the qwen preset's numbers move with the sampling.
+#   [opd]    2-alignment/opd.sh's rollout sampling, from M2RL's script: temperature 1.0, top-p 1.0, top-k off. For
+#            2c's warm-up student only (2-alignment/README.md, "Repairing 2c's warm-up"): whether its loops at m2rl's
+#            temperature 0.6 go away at 1.0.
 # The samples per problem (K) are in benchmarks.py (BENCH_SAMPLES), the same for every preset.
 case "$preset" in
   qwen) TEMP=0.6                   # [qwen3]
@@ -48,7 +52,12 @@ case "$preset" in
         TOP_P=0.95                 # ASSUMED (see above)
         TOP_K=-1                   # [m2rl] none given
         MAX_TOKENS=32768 ;;        # [m2rl] "32K"
-  *) echo "unknown preset: $preset (qwen, m2rl or tml)" >&2; exit 2 ;;
+  m2rl_temperature_1)
+        TEMP=1.0                   # [opd]
+        TOP_P=1.0                  # [opd]
+        TOP_K=-1                   # [opd]
+        MAX_TOKENS=32768 ;;        # [m2rl] "32K", so only the sampling differs from m2rl
+  *) echo "unknown preset: $preset (qwen, m2rl, tml or m2rl_temperature_1)" >&2; exit 2 ;;
 esac
 # Thinking on for both: each model's own chat template, enable_thinking=True ([qwen3], [m2rl]).
 # ---- infrastructure ----

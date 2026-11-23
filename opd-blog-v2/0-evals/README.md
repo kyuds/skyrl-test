@@ -24,6 +24,10 @@ Later stages: `eval_sft_1a` on b200-1 before 1b (target: Thinking Machines' 60% 
 64 samples and 38,912 tokens, but Thinking Machines' sampling. They show how far section 1's numbers depend on the
 sampling, since the blog does not say how its 60% and 70% were measured. They run on b200-2 ahead of 2c.
 
+`eval_sft_2c_warmup_math_temperature_1` (h100-2) scores 2c's warm-up student with the M2RL preset's length at the
+sampling section 2's OPD trains with (`m2rl_temperature_1`, below). At the M2RL preset's temperature 0.6 a quarter of
+its answers loop; this eval shows whether they still do at 1.0 (`../2-alignment/README.md`, "Repairing 2c's warm-up").
+
 **Pass mark:** within about 3 points of the published number. AIME's 30 problems at 64 samples each give a standard
 error near 1 point, so 3 points is a real difference. A model that misses is not used until the gap is understood:
 first check the cut rate (answers that hit the length limit) and the grader, then the settings below.
@@ -99,9 +103,10 @@ numbers were sampled the same way is ASSUMED. The length stays at 38,912: Qwen3-
 64,000 would need YaRN, and keeping the qwen preset's length leaves the sampling as the only difference.
 
 The score is the mean over all samples (Avg@K), in percent. A model's own context caps its answers: `generate.py`
-shortens a request that would not fit. Section 2's runs all use the M2RL preset, so they compare on one setting; the
-teachers' own scores are their authors' settings. Qwen3-32B runs two GPUs per vLLM engine on an H100 (its 64 GB of
-weights leave one GPU no room for a 38,912-token context), one on a B200.
+shortens a request that would not fit. Section 2's runs all use the M2RL preset, so they compare on one setting
+(`m2rl_temperature_1`, the M2RL preset at temperature 1.0, top-p 1.0 and no top-k, as `../2-alignment/opd.sh` samples
+its rollouts, is for one diagnostic eval); the teachers' own scores are their authors' settings. Qwen3-32B runs two GPUs
+per vLLM engine on an H100 (its 64 GB of weights leave one GPU no room for a 38,912-token context), one on a B200.
 
 ## Benchmarks and graders
 
