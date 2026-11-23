@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
 # Runs on the VM, on all 8 GPUs: 4 for the student, 4 for its teacher. Section 2's OPD: the student is M2RL-SFT on M2RL's math prompts, with M2RL's MT-OPD
-# recipe and one teacher; only the teacher (and, for 2c, the warm-up; for 2d, the clip) changes. See README.md here.
+# recipe and one teacher; only the teacher (and, for 2c and 2e, the warm-up; for 2d, the clip) changes. See README.md here.
 #   2a  teacher M2RL-RL_Math: RL'd from this very student, so aligned
 #   2b  teacher Qwen3-32B (thinking): stronger, but a different lineage, so misaligned
 #   2c  as 2b, from the student after its warm-up on Qwen3-32B's answers (sft_2c_m2rl_sft_warmup)
 #   2d  as 2b, with each token's teacher signal clipped below at CLIP_MIN nats
+#   2e  as 2c, from the student after a light warm-up: the same SFT at a fifth of the learning rate (sft_2e_m2rl_sft_light_warmup)
 # From ~/SkyRL:
 #   bash skyrl-test/opd-blog-v2/common/job.sh opd_2b_m2rl_sft_from_qwen3_32b    # as orchestrate.sh runs it
 #   bash skyrl-test/opd-blog-v2/2-alignment/opd.sh 2b --smoke                   # 2 tiny steps
 # Anything after the variant is passed to SkyRL as an extra override. Preempted? Run it again; it resumes.
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
-variant="${1:?variant: 2a, 2b, 2c or 2d}"; shift
+variant="${1:?variant: 2a, 2b, 2c, 2d or 2e}"; shift
 case "$variant" in
   2a) v2_init opd_2a_m2rl_sft_from_m2rl_rl_math "$@" ;;
   2b) v2_init opd_2b_m2rl_sft_from_qwen3_32b "$@" ;;
   2c) v2_init opd_2c_m2rl_warmup_from_qwen3_32b "$@" ;;
   2d) v2_init opd_2d_m2rl_sft_from_qwen3_32b_clip "$@" ;;
-  *) echo "unknown variant: $variant (2a, 2b, 2c or 2d)" >&2; exit 2 ;;
+  2e) v2_init opd_2e_m2rl_light_warmup_from_qwen3_32b "$@" ;;
+  *) echo "unknown variant: $variant (2a, 2b, 2c, 2d or 2e)" >&2; exit 2 ;;
 esac
 
 # ================================== HYPERPARAMETERS ==================================
@@ -60,7 +62,7 @@ EVAL_TOP_P=0.95                    # ASSUMED (0-evals/README.md)
 EVAL_TOP_K=-1                      # none given
 # ---- infrastructure, not hyperparameters ----
 STUDENT_GPUS=4                     # half the node; the teacher runs on the other half (below). One node per run, so
-                                   # 2a, 2b and 2d run at once on the three nodes left (config.sh)
+                                   # section 2's runs share the three nodes left (config.sh)
 MICRO=1                            # sequences per GPU per micro-batch
 # =====================================================================================
 
@@ -69,17 +71,20 @@ case "$variant" in
   2a)    TEACHER="$M2RL_MATH" ;;
   2b|2d) TEACHER="$QWEN3_32B" ;;
   2c)    TEACHER="$QWEN3_32B"; STUDENT="$(v2_model kit:sft_2c_m2rl_sft_warmup)" ;;
+  2e)    TEACHER="$QWEN3_32B"; STUDENT="$(v2_model kit:sft_2e_m2rl_sft_light_warmup)" ;;
 esac
 # The teacher's engines fill the node's other GPUs, one GPU each, except Qwen3-32B on an H100, which needs two.
 TEACHER_TP=1
 if [[ "$TEACHER" == "$QWEN3_32B" ]]; then TEACHER_TP="$(v2_tp_32b)"; fi
 EXTRA_OPD=()
 if [[ $variant == 2d ]]; then EXTRA_OPD+=("trainer.algorithm.opd.advantage_clip_min=$CLIP_MIN"); fi
+EXTRA_TAGS=""
+if [[ $variant == 2e ]]; then EXTRA_TAGS=",'light-warmup','warmup-lr1e-5'"; fi
 
 v2_collect < <(
   v2_opd_recipe
   v2_teacher "$TEACHER" $(((8 - STUDENT_GPUS) / TEACHER_TP)) "$TEACHER_TP"
-  v2_bookkeeping "['opd','section2','$variant','nemotron3-nano-rl-math','teacher:${TEACHER#*/}']"
+  v2_bookkeeping "['opd','section2','$variant','nemotron3-nano-rl-math','teacher:${TEACHER#*/}'$EXTRA_TAGS]"
   printf '%s\n' ${EXTRA_OPD[@]+"${EXTRA_OPD[@]}"}
 )
 v2_launch opd

@@ -23,7 +23,7 @@ every domain; only b200-1 needs it.
 
 | File | Rows | What | Used by |
 |---|---|---|---|
-| `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | 2a to 2d, 2c's traces |
+| `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | 2a to 2e, the warm-ups' traces |
 | `mopd_train.parquet` | 57,800 | Math above, plus competitive coding (19,169) and instruction following (16,575) | MOPD |
 | `deepmath_train.parquet` | about 103,000 | DeepMath-103K: the question alone, graded against `final_answer` | 1b |
 | `aime24.parquet`, `aime25.parquet` | 30 each | AIME 2024 and 2025, M2RL's prompt | Every OPD run's eval, and `0-evals` |

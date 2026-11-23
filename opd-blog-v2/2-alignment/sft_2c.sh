@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# Runs on the VM, on all 8 GPUs. 2c's warm-up: SFT of M2RL-SFT on Qwen3-32B's correct answers (traces.sh), so the
-# student starts closer to its teacher before OPD. See README.md in this folder. From ~/SkyRL:
-#   bash skyrl-test/opd-blog-v2/common/job.sh sft_2c_m2rl_sft_warmup     # as orchestrate.sh runs it
-#   bash skyrl-test/opd-blog-v2/2-alignment/sft_2c.sh --smoke             # 2 steps, nothing uploaded
+# Runs on the VM, on all 8 GPUs. The warm-ups of 2c and 2e: SFT of M2RL-SFT on Qwen3-32B's correct answers
+# (traces.sh), so the student starts closer to its teacher before OPD. See README.md in this folder.
+#   2c  the warm-up at M2RL's own learning rate for this kind of SFT
+#   2e  the light warm-up: the same, at a fifth of that learning rate
+# From ~/SkyRL:
+#   bash skyrl-test/opd-blog-v2/common/job.sh sft_2e_m2rl_sft_light_warmup   # as orchestrate.sh runs it
+#   bash skyrl-test/opd-blog-v2/2-alignment/sft_2c.sh 2e --smoke              # 2 steps, nothing uploaded
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
-v2_init sft_2c_m2rl_sft_warmup "$@"
+variant="${1:?variant: 2c or 2e}"; shift
+case "$variant" in
+  2c) v2_init sft_2c_m2rl_sft_warmup "$@" ;;
+  2e) v2_init sft_2e_m2rl_sft_light_warmup "$@" ;;
+  *) echo "unknown variant: $variant (2c or 2e)" >&2; exit 2 ;;
+esac
 
 DATA="$SFT_2C"
 if [[ $SMOKE == 1 ]]; then DATA="${SFT_2C}_smoke"; fi   # traces.sh --smoke writes it
@@ -27,7 +35,11 @@ if [[ $V2_DRY_RUN != 1 ]]; then ROWS="$(python3 -c 'import json,sys; print(json.
 SFT_BASE="$M2RL_SFT"               # already a chat model: its export ends turns at <|im_end|>
 SFT_ROWS="$ROWS"
 SFT_DATA="$DATA"                   # traces.sh: Qwen3-32B's answers, one per prompt, cut at SFT_MAX_LEN
-SFT_LR=5e-5                        # [mtoff]
+SFT_LR=5e-5                        # 2c: [mtoff]
+if [[ $variant == 2e ]]; then
+  SFT_LR=1e-5                      # 2e: this kit's (README.md, "2e's light warm-up"). [mtoff]'s teachers are RL'd from
+fi                                 # this student, Qwen3-32B is not: at 5e-5, 25 steps moved 2c's student further
+                                   # than its 250 OPD steps at 1e-6 did, and it started at 26% looping answers
 SFT_BATCH=512                      # [mtoff]
 SFT_EPOCHS=1                       # ASSUMED: [mtoff] gives none
 SFT_WARMUP=$(( (ROWS / SFT_BATCH + 9) / 10 ))   # [sft] 10% of the steps, rounded up
@@ -41,5 +53,6 @@ SFT_MICRO=1
 SFT_CKPT_EVERY=10
 SFT_HF_EVERY=1000                  # only the final export
 SFT_TAGS="['sft','section2','2c','warmup','qwen3-32b-traces','M2RL-SFT']"
+if [[ $variant == 2e ]]; then SFT_TAGS="['sft','section2','2e','light-warmup','lr1e-5','qwen3-32b-traces','M2RL-SFT']"; fi
 # =====================================================================================
 v2_sft

@@ -70,7 +70,10 @@ v2_teacher_field() { echo "$V2_TEACHER_SERVERS" | awk -v k="$1" -v c="$2" '$1 ==
 # ends: it serves until stopped. The runs that score against it wait, at launch, until it answers.
 # eval_sft_1a_tml and eval_opd_1b_final_tml (section 1's models at Thinking Machines' sampling, 0-evals/README.md)
 # sit in b200-2's stage 2, ahead of 2c, so one chain runs them and then 2c; 2b follows 2c there. Section 3 (MOPD and
-# its teachers) is in stage 3, so that h100-2's stage 2 is 2d alone: a serve_teachers_* job ahead of it never ends.
+# its teachers) is in stage 3, so that h100-2's stage 2 is 2e alone: a serve_teachers_* job ahead of it never ends.
+# 2d (opd_2d_m2rl_sft_from_qwen3_32b_clip, h100-2) has no rows: it was stopped at step 56 on 2026-11-23, having
+# collapsed as 2b did (2-alignment/README.md, "2d's clip"), and its step-50 export is on the Hub. Its job is
+# unfinished, so a row would start it again.
 V2_JOBS="${V2_JOBS:-
 1 b200-2 sft_1a_qwen3_8b_base_ot3             -                                       1-tml/sft.sh
 1 b200-2 eval_qwen3_32b_math                  -                                       0-evals/run.sh eval_qwen3_32b_math Qwen/Qwen3-32B qwen math
@@ -81,7 +84,7 @@ V2_JOBS="${V2_JOBS:-
 1 h100-4 eval_m2rl_sft_code_if                -                                       0-evals/run.sh eval_m2rl_sft_code_if Jackwang111/M2RL-SFT m2rl code,if
 1 h100-4 eval_m2rl_rl_coding_code             -                                       0-evals/run.sh eval_m2rl_rl_coding_code Jackwang111/M2RL-RL_Coding m2rl code
 1 h100-4 eval_m2rl_rl_if_if                   -                                       0-evals/run.sh eval_m2rl_rl_if_if Jackwang111/M2RL-RL_IF m2rl if
-2 b200-2 sft_2c_m2rl_sft_warmup               traces_2c_qwen3_32b                     2-alignment/sft_2c.sh
+2 b200-2 sft_2c_m2rl_sft_warmup               traces_2c_qwen3_32b                     2-alignment/sft_2c.sh 2c
 2 b200-2 eval_sft_1a_tml                      sft_1a_qwen3_8b_base_ot3                0-evals/run.sh eval_sft_1a_tml kit:sft_1a_qwen3_8b_base_ot3 tml math
 2 b200-2 eval_opd_1b_final_tml                opd_1b_ot3sft8b_from_qwen3_8b           0-evals/run.sh eval_opd_1b_final_tml run:opd_1b_ot3sft8b_from_qwen3_8b tml math
 2 b200-2 opd_2c_m2rl_warmup_from_qwen3_32b    sft_2c_m2rl_sft_warmup,eval_qwen3_32b_math,eval_m2rl_sft_math 2-alignment/opd.sh 2c
@@ -90,8 +93,9 @@ V2_JOBS="${V2_JOBS:-
 2 b200-2 eval_opd_2b_final                    opd_2b_m2rl_sft_from_qwen3_32b          0-evals/run.sh eval_opd_2b_final run:opd_2b_m2rl_sft_from_qwen3_32b m2rl math
 2 h100-4 opd_2a_m2rl_sft_from_m2rl_rl_math    eval_m2rl_rl_math_math,eval_m2rl_sft_math 2-alignment/opd.sh 2a
 2 h100-4 eval_opd_2a_final                    opd_2a_m2rl_sft_from_m2rl_rl_math       0-evals/run.sh eval_opd_2a_final run:opd_2a_m2rl_sft_from_m2rl_rl_math m2rl math
-2 h100-2 opd_2d_m2rl_sft_from_qwen3_32b_clip  eval_qwen3_32b_math,eval_m2rl_sft_math  2-alignment/opd.sh 2d
-2 h100-2 eval_opd_2d_final                    opd_2d_m2rl_sft_from_qwen3_32b_clip     0-evals/run.sh eval_opd_2d_final run:opd_2d_m2rl_sft_from_qwen3_32b_clip m2rl math
+2 h100-2 sft_2e_m2rl_sft_light_warmup         traces_2c_qwen3_32b                     2-alignment/sft_2c.sh 2e
+2 h100-2 opd_2e_m2rl_light_warmup_from_qwen3_32b sft_2e_m2rl_sft_light_warmup,eval_qwen3_32b_math,eval_m2rl_sft_math 2-alignment/opd.sh 2e
+2 h100-2 eval_opd_2e_final                    opd_2e_m2rl_light_warmup_from_qwen3_32b 0-evals/run.sh eval_opd_2e_final run:opd_2e_m2rl_light_warmup_from_qwen3_32b m2rl math
 3 h100-2 serve_teachers_h100_2                -                                       teachers/serve.sh h100-2
 3 h100-4 mopd_3_m2rl_sft_from_math_code_if    eval_m2rl_sft_math,eval_m2rl_rl_math_math,eval_m2rl_sft_code_if,eval_m2rl_rl_coding_code,eval_m2rl_rl_if_if 3-mopd/run.sh
 3 h100-4 eval_mopd_3_final                    mopd_3_m2rl_sft_from_math_code_if       0-evals/run.sh eval_mopd_3_final run:mopd_3_m2rl_sft_from_math_code_if m2rl all
