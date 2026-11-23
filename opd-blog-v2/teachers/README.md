@@ -3,8 +3,8 @@
 1b and MOPD score with teachers served from a node of their own, so each student has all 8 GPUs of its node: Qwen3-8B
 on h100-6 for 1b, the three M2RL experts on h100-2 for MOPD. Section 2's runs keep their teacher on 4 of their own
 node's 8 GPUs instead (`../2-alignment/README.md`), and expect the speed measured below for that layout: with three
-nodes left for 2a, 2b and 2f (2d and 2e until 2026-11-23), one run per node finishes all three sooner than served teachers
-would, which fit one run at a time on the two H100 nodes.
+nodes left for 2a, 2b and 2d (then 2e and 2f, until 2026-11-23), one run per node finishes all three sooner than served
+teachers would, which fit one run at a time on the two H100 nodes.
 
 ## Why
 
@@ -87,7 +87,7 @@ Stop a server with `orchestrate.sh stop h100-2`. Start it again with `orchestrat
   half of vLLM's 10-second windows, ran only 2 or 3 at once, and averaged about 3,400 prompt tokens a second. 2d's
   answers took 640 to 900 s a step to generate and score, against 2a's 460 to 530. On its own node with 2
   engines, half of the 4 that were saturated, 2d's steps took about 34 minutes on 2026-11-21 to 22, as long as 2a's;
-  2f runs the same layout.
+  2f's first took 38 on the same layout.
 - **Cross-region traffic.** Each run step sends its 1,024 answers to the teacher and gets the scores back, roughly
   1 GB a step across regions. That is an estimate, not a measurement: about 0.3 TB over MOPD's 300 steps, billed as
   network egress at roughly $0.01 to $0.08 per GB.

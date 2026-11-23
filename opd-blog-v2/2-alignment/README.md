@@ -15,7 +15,8 @@ Then fixes for 2b, with the same teacher:
   did ("2d's clip").
 - **2e, light warm-up:** 2c with its warm-up at a fifth of the learning rate. Stopped at OPD step 2: its student was
   2c's again ("Repairing 2c's warm-up").
-- **2f, short-answer warm-up:** 2c with its warm-up on only the answers of at most 8,192 tokens (same section).
+- **2f, short-answer warm-up:** 2c with its warm-up on only the answers of at most 8,192 tokens. Stopped at OPD
+  step 1: its student looped less than 2c's but was right less often (same section).
 
 The student starts at 56.51/43.54 measured (M2RL Table 3: 56.04/51.30); both teachers leave 24 to 32 points to
 learn. Its AIME 2025 miss is its own behaviour: 21% of its answers there are a bare Python tool call, which scores
@@ -32,8 +33,7 @@ against 0.11 to RL_Math. Qwen3-32B's chat template renders the student's prompts
 | `opd_2b_m2rl_sft_from_qwen3_32b` | 2 | b200-2 | 2b, after 2c |
 | `opd_2d_m2rl_sft_from_qwen3_32b_clip` | 2 | h100-2 | 2d, stopped at step 56 on 2026-11-23; no longer in `config.sh` |
 | `sft_2e_m2rl_sft_light_warmup`, `opd_2e_m2rl_light_warmup_from_qwen3_32b` | 2 | h100-2 | 2e, stopped at OPD step 2 on 2026-11-23; no longer in `config.sh` |
-| `sft_2f_m2rl_sft_warmup_short_answers` | 2 | h100-2 | 2f's warm-up SFT, on 2c's warm-up data (copied from b200-2), filtered |
-| `opd_2f_m2rl_warmup_short_answers_from_qwen3_32b` | 2 | h100-2 | 2f |
+| `sft_2f_m2rl_sft_warmup_short_answers`, `opd_2f_m2rl_warmup_short_answers_from_qwen3_32b` | 2 | h100-2 | 2f, stopped at OPD step 1 on 2026-11-23; no longer in `config.sh` |
 | `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-4 | 2a |
 | `eval_opd_2*_final` | | | each run's last export at 64 samples, M2RL's settings |
 
@@ -61,8 +61,8 @@ same block with three.
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's, at M2RL's eval settings (`../0-evals`) |
 
 Infrastructure: one node per run, 4 GPUs for the student (training and generation colocated) and 4 for its teacher:
-RL_Math on 4 engines of 1 GPU for 2a (h100-4); Qwen3-32B on 2 engines of 2 GPUs for 2f (h100-2, after 2d and 2e), and on
-4 engines of 1 GPU on b200-2 for 2c and then 2b. That puts 2a, 2b and 2f on the three nodes left after MOPD at once; with
+RL_Math on 4 engines of 1 GPU for 2a (h100-4); Qwen3-32B on 2 engines of 2 GPUs for 2d, 2e and 2f (h100-2), and on
+4 engines of 1 GPU on b200-2 for 2c and then 2b. That puts three runs on the three nodes left after MOPD at once; with
 served teachers, the two H100 nodes would fit one run at a time. Micro-batch 1; checkpoints every 5 steps (the last 2 kept),
 exports every 50, and the last export goes to the Hub.
 
@@ -106,29 +106,35 @@ do not loop: none of the 12,535 ends in one. 2c's OPD then spent its first 75 st
 Each repair changes one thing in 2c's warm-up and is screened before its 6-day OPD: it runs until OPD step 1 and is
 stopped there unless its student passes three checks against M2RL-SFT and 2c's: reverse KL at step 1 between 2c's
 0.19 and 2b's 0.54, at most about 5% looping answers at the step-0 eval, and at least M2RL-SFT's 52% right. A run that
-passes continues, and must not collapse at steps 20 to 30, where 2b's began. Both run on h100-2 (2 Qwen3-32B engines of
-2 GPUs; 2c ran on b200-2 with 4 of 1 GPU): the same recipe, a different layout.
+passes continues, and must not collapse at steps 20 to 30, where 2b's began. Both ran on h100-2 (2 Qwen3-32B engines of
+2 GPUs; 2c ran on b200-2 with 4 of 1 GPU): the same recipe, a different layout. Neither passed:
+
+| At the start of OPD | M2RL-SFT | 2c (5e-5) | 2e (1e-5) | 2f (answers up to 8,192 tokens) |
+|---|---|---|---|---|
+| Reverse KL to Qwen3-32B, step 1 | 0.54 | 0.192 | 0.193 | 0.229 |
+| Step-0 eval: right / looping / at the token limit | 52% / 3% / 19% | 45% / 26% / 34% | 47% / 23% / 31% | 42% / 18% / 30% |
+| Policy entropy, step 1 | 0.67 | 0.39 | 0.39 | 0.41 |
+| Warm-up's SFT loss, step 3 / 6 / last | | 0.419 / 0.414 / 0.345 (25) | 0.554 / 0.407 / 0.356 (25) | 0.432 / 0.477 / 0.374 (14) |
+
+Both keep 2c's answers, sampled from Qwen3-32B at Qwen's thinking settings (temperature 0.6, top-p 0.95, top-k 20,
+`traces.sh`). Whether that sampling is the cause is untested.
 
 **2e, the light warm-up: the learning rate, 1e-5 instead of 5e-5.** M2RL's 5e-5 is for answers from teachers RL'd from
 this very student; Qwen3-32B's are not, so the same rate might move the student much further. It did not matter.
-Stopped at OPD step 2 on 2026-11-23, its student was 2c's again:
-
-| At the start of OPD | M2RL-SFT | 2c (5e-5) | 2e (1e-5) |
-|---|---|---|---|
-| Reverse KL to Qwen3-32B, step 1 | 0.54 | 0.192 | 0.193 |
-| Step-0 eval: right / looping / at the token limit | 52% / 3% / 19% | 45% / 26% / 34% | 47% / 23% / 31% |
-| Policy entropy, step 1 | 0.67 | 0.39 | 0.39 |
-| Warm-up's SFT loss, step 3 / 6 / 25 | | 0.419 / 0.414 / 0.345 | 0.554 / 0.407 / 0.356 |
-
-At a fifth of the rate the loss fell more slowly for 3 steps and was level with 2c's by step 6: the student takes on
-the answers' style within about 2,500 of them either way. What the warm-up teaches, not how hard it pushes, does the
+Stopped at OPD step 2 on 2026-11-23, its student was 2c's again. At a fifth of the rate the loss fell more slowly for
+3 steps and was level with 2c's by step 6: the student takes on the answers' style within about 2,500 of them either
+way. What the warm-up teaches, not how hard it pushes, does the
 damage. 2e's warm-up is on the Hub (`sft_2e_m2rl_sft_light_warmup`).
 
 **2f, the short-answer warm-up: only the answers of at most 8,192 tokens.** 2c's recipe at 5e-5, on the kept answers
-whose loss-masked tokens number at most 8,192: about 6,756 of 12,535 (54%) by Qwen3-32B's own token counts, so about
-14 steps instead of 25. The 10% of answers over 14,000 tokens end within 2,400 tokens of the 16,384-token limit; a
+whose loss-masked tokens number at most 8,192: 6,756 of 12,535 (54%), 4,863 tokens each on average, so 14 steps
+instead of 25. The 10% of answers over 14,000 tokens end within 2,400 tokens of the 16,384-token limit; a
 student that copies their length runs long, and 2c's warm-up student ran to the limit on 34% of its eval answers.
-`filter_traces.py` builds the store from 2c's on the node (`sft_2c_qwen3_32b_traces_answers_le8192`).
+`filter_traces.py` built the store from 2c's on the node (`sft_2c_qwen3_32b_traces_answers_le8192`). Length was not
+the cause. Stopped at OPD step 1 on 2026-11-23, 2f's student had never
+seen an answer over 8,192 tokens, yet 30% of its eval answers ran to the 32,768-token limit; fewer looped than 2c's
+(18% against 26%), and fewer were right (42% against 45%). 2f's warm-up is on the Hub
+(`sft_2f_m2rl_sft_warmup_short_answers`).
 
 ## 2d's clip
 
@@ -167,12 +173,12 @@ bash skyrl-test/opd-blog-v2/2-alignment/traces.sh --smoke
 ```
 
 ```bash
-bash skyrl-test/opd-blog-v2/2-alignment/sft_2c.sh 2f --smoke
+bash skyrl-test/opd-blog-v2/2-alignment/sft_2c.sh 2c --smoke
 ```
 
 ## What to watch
 
-On W&B `opd-blog-v2`, for 2a to 2f side by side:
+On W&B `opd-blog-v2`, for 2a to 2d side by side:
 
 | Metric | Aligned (2a) | Broken (2b), as expected |
 |---|---|---|
@@ -181,23 +187,24 @@ On W&B `opd-blog-v2`, for 2a to 2f side by side:
 | `opd/teacher/_/log_ratio_p01` | about -2.3 | far below (about -7.9) |
 | `opd/truncation_rate`, `opd/repetition_rate` | stable | rise: answers run to the limit or loop |
 
-2b broke as expected, and 2d with it ("2d's clip"); 2c and 2f should look like 2a.
+2b broke as expected, and 2d with it ("2d's clip"); 2c should look like 2a.
 
 ## Risks
 
 - **The teachers differ in size as well as lineage** (4B against 32B). A reader can ask whether size, not alignment,
-  breaks 2b. The smoke tests' reverse KL is the direct evidence that it is alignment; 2c and 2f fixing 2b with the
-  same 32B teacher is the stronger evidence.
+  breaks 2b. The smoke tests' reverse KL is the direct evidence that it is alignment; 2c fixing 2b with the same 32B
+  teacher is the stronger evidence.
 - **The aligned teacher measured slightly stronger** (82.29/75.83 against Qwen3-32B's 80.68/72.24), so part of any
-  2a-over-2b gap could be teacher strength rather than alignment. 2c and 2f, with the same teacher as 2b, are the
-  clean comparison.
+  2a-over-2b gap could be teacher strength rather than alignment. 2c, with the same teacher as 2b, is the clean
+  comparison.
 - **The student's tool calls.** Neither teacher writes `<tool_call>` here, so OPD should remove M2RL-SFT's bare tool
   calls early in every run, 2b included. Part of any early AIME gain is that alone; count the tool-call rate in the
   final evals' `responses.jsonl` before reading a gain as learned math.
-- **Qwen3-32B is the slowest teacher**: even a node of its own (4 engines of 2 GPUs) keeps 2b's and 2f's steps
+- **Qwen3-32B is the slowest teacher**: even a node of its own (4 engines of 2 GPUs) keeps 2b's steps
   longer than 2a's (`../teachers/README.md`). 2a shares RL_Math with MOPD (h100-2). If a teacher node is preempted, its runs fail and resume from their last checkpoint
   (`../teachers/README.md`).
-- **The warm-up recipe is borrowed, not tuned**: 2e and 2f each change one thing in it (above).
+- **The warm-up recipe is borrowed, not tuned**: 2e and 2f each changed one thing in it, and neither repaired it
+  (above).
 
 [paper]: https://arxiv.org/abs/2602.12566
 [script]: https://github.com/Mosi-AI/M2RL/blob/c94ce97ce7f2e0f2800e6dd8c20667f00ca223d4/M2RL/slime/scripts/multi_teacher_opd.sh#L66-L127
