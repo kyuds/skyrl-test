@@ -1,27 +1,39 @@
 #!/usr/bin/env bash
-# Runs on the VM, on all 8 GPUs. The warm-ups of 2c and 2e: SFT of M2RL-SFT on Qwen3-32B's correct answers
+# Runs on the VM, on all 8 GPUs. The warm-ups of 2c, 2e and 2f: SFT of M2RL-SFT on Qwen3-32B's correct answers
 # (traces.sh), so the student starts closer to its teacher before OPD. See README.md in this folder.
 #   2c  the warm-up at M2RL's own learning rate for this kind of SFT
 #   2e  the light warm-up: the same, at a fifth of that learning rate
+#   2f  the short-answer warm-up: 2c's, on only the answers of at most 8,192 tokens
 # From ~/SkyRL:
-#   bash skyrl-test/opd-blog-v2/common/job.sh sft_2e_m2rl_sft_light_warmup   # as orchestrate.sh runs it
-#   bash skyrl-test/opd-blog-v2/2-alignment/sft_2c.sh 2e --smoke              # 2 steps, nothing uploaded
+#   bash skyrl-test/opd-blog-v2/common/job.sh sft_2f_m2rl_sft_warmup_short_answers   # as orchestrate.sh runs it
+#   bash skyrl-test/opd-blog-v2/2-alignment/sft_2c.sh 2f --smoke                      # 2 steps, nothing uploaded
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
-variant="${1:?variant: 2c or 2e}"; shift
+variant="${1:?variant: 2c, 2e or 2f}"; shift
 case "$variant" in
   2c) v2_init sft_2c_m2rl_sft_warmup "$@" ;;
   2e) v2_init sft_2e_m2rl_sft_light_warmup "$@" ;;
-  *) echo "unknown variant: $variant (2c or 2e)" >&2; exit 2 ;;
+  2f) v2_init sft_2f_m2rl_sft_warmup_short_answers "$@" ;;
+  *) echo "unknown variant: $variant (2c, 2e or 2f)" >&2; exit 2 ;;
 esac
 
+# 2f's change, a hyperparameter (in the block below too): only the answers (loss-masked tokens) of at most this many
+# tokens. The filtered store is built from the full one on first use (filter_traces.py).
+MAX_ANSWER=""
+if [[ $variant == 2f ]]; then MAX_ANSWER=8192; fi
 DATA="$SFT_2C"
+if [[ -n $MAX_ANSWER ]]; then DATA="${SFT_2C}_answers_le${MAX_ANSWER}"; fi
 if [[ $SMOKE == 1 ]]; then DATA="${SFT_2C}_smoke"; fi   # traces.sh --smoke writes it
+if [[ $V2_DRY_RUN != 1 && $SMOKE != 1 && -n $MAX_ANSWER && ! -f "$DATA.stats.json" && -f "$SFT_2C.stats.json" ]]; then
+  (cd "$SKYRL_DIR" && uv run --isolated --extra fsdp python "$V2_KIT/2-alignment/filter_traces.py" --data "$SFT_2C" \
+    --max-answer-tokens "$MAX_ANSWER" --out "$DATA")
+fi
 if [[ $V2_DRY_RUN != 1 && ! -f "$DATA.stats.json" ]]; then
   echo "no warm-up data at $DATA: run 2-alignment/traces.sh$([[ $SMOKE == 1 ]] && echo ' --smoke') first" >&2
   exit 1
 fi
 ROWS=17000   # the dry run's guess; on a node, the rows traces.sh kept
+if [[ -n $MAX_ANSWER ]]; then ROWS=6756; fi   # the dry run's guess: Qwen3-32B's token counts (2026-11-23)
 if [[ $V2_DRY_RUN != 1 ]]; then ROWS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["rows"])' "$DATA.stats.json")"; fi
 
 # ================================== HYPERPARAMETERS ==================================
@@ -35,7 +47,7 @@ if [[ $V2_DRY_RUN != 1 ]]; then ROWS="$(python3 -c 'import json,sys; print(json.
 SFT_BASE="$M2RL_SFT"               # already a chat model: its export ends turns at <|im_end|>
 SFT_ROWS="$ROWS"
 SFT_DATA="$DATA"                   # traces.sh: Qwen3-32B's answers, one per prompt, cut at SFT_MAX_LEN
-SFT_LR=5e-5                        # 2c: [mtoff]
+SFT_LR=5e-5                        # 2c and 2f: [mtoff]
 if [[ $variant == 2e ]]; then
   SFT_LR=1e-5                      # 2e: this kit's (README.md, "2e's light warm-up"). [mtoff]'s teachers are RL'd from
 fi                                 # this student, Qwen3-32B is not: at 5e-5, 25 steps moved 2c's student further
@@ -48,11 +60,13 @@ SFT_BETAS="[0.9,0.98]"             # ASSUMED: not given for SFT; [script]'s, M2R
 SFT_WEIGHT_DECAY=0.1               # [sft]
 SFT_GRAD_CLIP=1.0                  # slime's default (2-alignment/opd.sh, [slime])
 SFT_MAX_LEN=18432                  # this kit's: a 2,048-token prompt + a 16,384-token answer, the OPD lengths
+SFT_MAX_ANSWER="${MAX_ANSWER:-16384}" # 2f: 8,192, this kit's (README.md, "2f's short-answer warm-up"); else traces.sh's limit
 # Loss on the answer tokens. ---- infrastructure, not hyperparameters ----
 SFT_MICRO=1
 SFT_CKPT_EVERY=10
 SFT_HF_EVERY=1000                  # only the final export
 SFT_TAGS="['sft','section2','2c','warmup','qwen3-32b-traces','M2RL-SFT']"
 if [[ $variant == 2e ]]; then SFT_TAGS="['sft','section2','2e','light-warmup','lr1e-5','qwen3-32b-traces','M2RL-SFT']"; fi
+if [[ $variant == 2f ]]; then SFT_TAGS="['sft','section2','2f','warmup-short-answers','answers-le8192','qwen3-32b-traces','M2RL-SFT']"; fi
 # =====================================================================================
 v2_sft
