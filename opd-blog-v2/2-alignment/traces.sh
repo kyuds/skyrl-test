@@ -1,39 +1,56 @@
 #!/usr/bin/env bash
-# Runs on the VM, on all 8 GPUs. 2c's warm-up data: Qwen3-32B (thinking) answers every one of M2RL's 22,056 math
+# Runs on the VM, on all 8 GPUs. The warm-ups' data: Qwen3-32B (thinking) answers every one of M2RL's 22,056 math
 # prompts twice; per prompt, the first answer that is correct and finished within 16,384 tokens is kept, then
-# tokenized for SFT of M2RL-SFT. See README.md in this folder. From ~/SkyRL:
-#   bash skyrl-test/opd-blog-v2/common/job.sh traces_2c_qwen3_32b    # as orchestrate.sh runs it
-#   bash skyrl-test/opd-blog-v2/2-alignment/traces.sh --smoke         # 16 prompts, 512 tokens; writes nothing for 2c
-# Lands in ~/opd-store/evals/<job>/ (requests, responses, grades, traces.jsonl) and $SFT_2C (pretokenized).
+# tokenized for SFT of M2RL-SFT. See README.md in this folder.
+#   2c  sampled at Qwen's thinking settings (2c, 2e and 2f train on these)
+#   2g  sampled as OPD samples the student, at temperature 1.0 with no top-p or top-k
+# From ~/SkyRL:
+#   bash skyrl-test/opd-blog-v2/common/job.sh traces_2g_qwen3_32b_temperature_1   # as orchestrate.sh runs it
+#   bash skyrl-test/opd-blog-v2/2-alignment/traces.sh 2g --smoke                   # 16 prompts, 512 tokens
+# Lands in ~/opd-store/evals/<job>/ (requests, responses, grades, traces.jsonl) and $SFT_2C or $SFT_2G (pretokenized).
 set -euo pipefail
 source "$(dirname "$0")/../common/run_lib.sh"
-v2_init traces_2c_qwen3_32b "$@"
+variant="${1:?variant: 2c or 2g}"; shift
+case "$variant" in
+  2c) v2_init traces_2c_qwen3_32b "$@" ;;
+  2g) v2_init traces_2g_qwen3_32b_temperature_1 "$@" ;;
+  *) echo "unknown variant: $variant (2c or 2g)" >&2; exit 2 ;;
+esac
 
 # ================================== HYPERPARAMETERS ==================================
 # README.md in this folder has the same table. No paper gives a warm-up recipe: the sizes here are this kit's.
 #   [plan]   the proposal of 2026-11-10: "Collect Nemotron3 answers from Qwen3-32B"
 #   [qwen3]  Qwen3 report (https://arxiv.org/abs/2505.09388), section 4.6: thinking mode at temperature 0.6, top-p 0.95,
 #            top-k 20
+#   [opd]    opd.sh's rollout sampling, from M2RL's script: temperature 1.0, top-p 1.0, top-k off
 MODEL="$QWEN3_32B"                 # [plan] 2b's teacher, so the warm-up moves the student toward it
 PROMPT_FILE="$MATH_TRAIN"          # [plan] Nemotron3 math: M2RL's 22,056 prompts, the ones 2c's OPD trains on
 N_PROMPTS=22056                    # all of them (the proposal's "20k" was a round number for this set)
 SAMPLES=2                          # this kit's: a second try keeps more of the hard prompts
-TEMPERATURE=0.6                    # [qwen3]
-TOP_P=0.95                         # [qwen3]
-TOP_K=20                           # [qwen3]
+TEMPERATURE=0.6                    # 2c: [qwen3]
+TOP_P=0.95                         # 2c: [qwen3]
+TOP_K=20                           # 2c: [qwen3]
+if [[ $variant == 2g ]]; then      # 2g's one change (README.md, "Repairing 2c's warm-up"): answers drawn from the
+  TEMPERATURE=1.0                  # distribution the teacher scores in OPD, not a sharpened one. [opd]
+  TOP_P=1.0                        # [opd]
+  TOP_K=-1                         # [opd]
+fi
 MAX_TOKENS=16384                   # this kit's: 2c's OPD rollout length, so the warm-up teaches answers that fit it
 # Kept: per prompt, the first sample that is correct (common/kit_main.py's grader) and finished (closed its thinking
 # and stopped at <|im_end|>). Tokenized with M2RL-SFT's tokenizer, cut at 18,432 tokens (a 2,048 prompt + 16,384).
 # ---- infrastructure ----
 TP="$(v2_tp_32b)"                  # 2 GPUs per engine on an H100, 1 on a B200
+CHUNKS=8                           # each engine saves its answers in 8 parts as each finishes, so a preemption
+                                   # loses at most one part (2g takes about a day on H100s; 0-evals/generate.py)
 # =====================================================================================
 
 OUT="$SFT_2C"
+if [[ $variant == 2g ]]; then OUT="$SFT_2G"; fi
 KEEP_ALL=0
 if [[ $SMOKE == 1 ]]; then
   # 512 tokens is too short for any thinking answer to finish, so the smoke test keeps every prompt's first answer,
   # right or wrong, finished or not: it checks the plumbing through tokenizing, not the filter.
-  N_PROMPTS=16; MAX_TOKENS=512; OUT="${SFT_2C}_smoke"; KEEP_ALL=1
+  N_PROMPTS=16; MAX_TOKENS=512; OUT="${OUT}_smoke"; KEEP_ALL=1
 fi
 DIR="$EVALS/$RUN"
 if [[ $V2_DRY_RUN == 1 ]]; then
@@ -48,7 +65,8 @@ cd "$SKYRL_DIR"
   --parquet "$PROMPT_FILE" --n "$N_PROMPTS" --samples "$SAMPLES" --seed 0 --out "$DIR"
 [[ -f "$DIR/responses.jsonl" ]] || env -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN uv run --isolated --extra fsdp \
   python "$V2_KIT/0-evals/generate.py" --model "$MODEL" --requests "$DIR/requests.jsonl" --tp "$TP" \
-  --out "$DIR/responses.jsonl" --temperature "$TEMPERATURE" --top-p "$TOP_P" --top-k "$TOP_K" --max-tokens "$MAX_TOKENS"
+  --out "$DIR/responses.jsonl" --temperature "$TEMPERATURE" --top-p "$TOP_P" --top-k "$TOP_K" --max-tokens "$MAX_TOKENS" \
+  --chunks "$CHUNKS"
 uv run --isolated --extra fsdp --with math-verify==0.9.0 python "$V2_KIT/0-evals/grade.py" --dir "$DIR" --tools "$TOOLS"
 uv run --isolated --extra fsdp python - "$DIR" "$KEEP_ALL" <<'PY'
 import json, os, sys

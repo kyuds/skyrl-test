@@ -26,7 +26,8 @@ sampling, since the blog does not say how its 60% and 70% were measured. They ru
 
 `eval_sft_2c_warmup_math_temperature_1` (h100-2) scores 2c's warm-up student with the M2RL preset's length at the
 sampling section 2's OPD trains with (`m2rl_temperature_1`, below). At the M2RL preset's temperature 0.6 a quarter of
-its answers loop; this eval shows whether they still do at 1.0 (`../2-alignment/README.md`, "Repairing 2c's warm-up").
+its answers loop; at 1.0, 0.3% do, and 53% are right (AIME 2024 53.8, 2025 51.9; 2026-11-23). That is why 2g warms up
+on answers sampled at 1.0 (`../2-alignment/README.md`, "Repairing 2c's warm-up").
 
 **Pass mark:** within about 3 points of the published number. AIME's 30 problems at 64 samples each give a standard
 error near 1 point, so 3 points is a real difference. A model that misses is not used until the gap is understood:

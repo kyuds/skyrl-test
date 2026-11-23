@@ -6,7 +6,7 @@ Four kinds of data, all written to the boot disk under `~/opd-store/data/v2/`, s
   and 3 distill over them.
 - **DeepMath-103K**, the prompts of Thinking Machines' OPD. Section 1 distills over them.
 - **AIME 2024 and 2025**, the in-training eval of every OPD run.
-- **SFT data, pretokenized:** OpenThoughts-3 for 1a, and Qwen3-32B's answers for 2c's warm-up.
+- **SFT data, pretokenized:** OpenThoughts-3 for 1a, and Qwen3-32B's answers for the warm-ups of 2c and 2g.
 
 You do not need to run anything here. Every job prepares what it needs and skips what is already there. By hand on a
 node, from `~/SkyRL`:
@@ -23,12 +23,13 @@ every domain; only b200-1 needs it.
 
 | File | Rows | What | Used by |
 |---|---|---|---|
-| `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | 2a to 2f, the warm-ups' traces |
+| `math_train.parquet` | 22,056 | M2RL's math set: DAPO-17k and Skywork-OR1 without OmniMath | 2a to 2g, the warm-ups' traces |
 | `mopd_train.parquet` | 57,800 | Math above, plus competitive coding (19,169) and instruction following (16,575) | MOPD |
 | `deepmath_train.parquet` | about 103,000 | DeepMath-103K: the question alone, graded against `final_answer` | 1b |
 | `aime24.parquet`, `aime25.parquet` | 30 each | AIME 2024 and 2025, M2RL's prompt | Every OPD run's eval, and `0-evals` |
 | `sft_ot3_all_384000/` | 384,000 | OpenThoughts-3, every domain, pretokenized | 1a |
-| `sft_2c_qwen3_32b_traces/` | up to 22,056 | Qwen3-32B's correct answers, pretokenized | 2c's warm-up |
+| `sft_2c_qwen3_32b_traces/` | up to 22,056 | Qwen3-32B's correct answers, pretokenized | the warm-ups of 2c, 2e and 2f |
+| `sft_2g_qwen3_32b_traces_temperature_1/` | up to 22,056 | the same, sampled at temperature 1.0 (h100-2) | 2g's warm-up |
 
 Each SFT folder has a `<folder>.stats.json` beside it: rows, finished and unfinished answers, rows cut at the length
 limit, tokens. It sits outside the folder because SkyRL's SFT loader reads every `.json` inside as data.
@@ -66,7 +67,8 @@ are, so they stay, as `<think>\n{reasoning so far}` with no `</think>` and no en
 stop mid-thought. In a 300-row sample, 148 rows were finished, 13 finished but cut, 139 unfinished (all cut at 16,384),
 and the mean was 13,131 tokens, so 384,000 rows are about 5 billion tokens.
 
-**2c's traces** keep only Qwen3-32B's correct answers that finished within 16,384 tokens (`2-alignment/README.md`).
+**2c's and 2g's traces** keep only Qwen3-32B's correct answers that finished within 16,384 tokens
+(`2-alignment/README.md`).
 
 ## Sources, pinned
 

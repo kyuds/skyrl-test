@@ -8,7 +8,9 @@ Qwen3-32B needs --tp 2 on an 80 GB H100, everything else fits one GPU).
 
 The prompt is the model's own chat template with thinking on, the same render the OPD student and teacher use.
 Writes one line per sample: id, bench, sample, response, finish_reason ("length" = cut at --max-tokens), tokens.
-A shard that finished is kept, so a rerun after a crash only samples the shards that did not.
+A shard that finished is kept, so a rerun after a crash only samples the shards that did not. With --chunks N, each
+engine also saves its share in N parts as each finishes (<out>.shard<i>.part), and a rerun resumes after the last
+saved part: a day-long run on a spot node then loses at most one part to a preemption.
 """
 
 import argparse
@@ -51,37 +53,63 @@ def worker(args) -> None:
                 seed=args.seed + 1000 * args.worker + k,
             )
         )
-    llm = LLM(
-        model=args.model,
-        tensor_parallel_size=args.tp,
-        distributed_executor_backend="mp" if args.tp > 1 else None,
-        max_model_len=max_len,
-        gpu_memory_utilization=0.9,
-        enable_prefix_caching=True,
-        seed=args.seed,
-    )
+    # Requests already saved in this engine's .part file (all n samples written) are not sampled again; a line cut
+    # by a crash, or a request with fewer than n lines, is dropped and sampled again.
+    part = f"{args.out}.shard{args.worker}.part"
+    saved = {}
+    if os.path.exists(part):
+        with open(part) as f:
+            for line in f:
+                try:
+                    x = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                saved.setdefault(x["id"], []).append(json.dumps(x) + "\n")
+    want = {r["id"]: int(r["n"]) for r in mine}
+    saved = {i: lines for i, lines in saved.items() if len(lines) == want.get(i)}
+    with open(part + ".tmp", "w") as f:
+        for lines in saved.values():
+            f.writelines(lines)
+    os.replace(part + ".tmp", part)
+    todo = [k for k, r in enumerate(mine) if r["id"] not in saved]
+    size = -(-len(mine) // max(1, args.chunks))
+    print(f"worker {args.worker}: {len(mine)} problems, {len(mine) - len(todo)} already saved, {len(todo)} to sample")
     start = time.time()
-    outputs = llm.generate(prompts, params)
-    tmp = f"{args.out}.shard{args.worker}.tmp"
-    n = 0
-    with open(tmp, "w") as f:
-        for r, out in zip(mine, outputs):
-            for j, c in enumerate(out.outputs):
-                f.write(
-                    json.dumps(
-                        {
-                            "id": r["id"],
-                            "bench": r["bench"],
-                            "sample": j,
-                            "response": c.text,
-                            "finish_reason": c.finish_reason,
-                            "tokens": len(c.token_ids),
-                        }
+    if todo:
+        llm = LLM(
+            model=args.model,
+            tensor_parallel_size=args.tp,
+            distributed_executor_backend="mp" if args.tp > 1 else None,
+            max_model_len=max_len,
+            gpu_memory_utilization=0.9,
+            enable_prefix_caching=True,
+            seed=args.seed,
+        )
+    for c0 in range(0, len(todo), size):
+        chunk = todo[c0 : c0 + size]
+        outputs = llm.generate([prompts[k] for k in chunk], [params[k] for k in chunk])
+        with open(part, "a") as f:
+            for k, out in zip(chunk, outputs):
+                r = mine[k]
+                for j, c in enumerate(out.outputs):
+                    f.write(
+                        json.dumps(
+                            {
+                                "id": r["id"],
+                                "bench": r["bench"],
+                                "sample": j,
+                                "response": c.text,
+                                "finish_reason": c.finish_reason,
+                                "tokens": len(c.token_ids),
+                            }
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
-                n += 1
-    os.replace(tmp, f"{args.out}.shard{args.worker}")
+            f.flush()
+            os.fsync(f.fileno())
+        print(f"worker {args.worker}: saved {c0 + len(chunk)} of {len(todo)} problems ({time.time() - start:.0f}s)")
+    n = sum(1 for _ in open(part))
+    os.replace(part, f"{args.out}.shard{args.worker}")
     print(f"worker {args.worker}: {len(mine)} problems, {n} samples in {time.time() - start:.0f}s")
 
 
@@ -97,6 +125,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--gpus", type=int, default=0, help="GPUs to use; 0 = every GPU on the node")
     parser.add_argument("--tp", type=int, default=1, help="GPUs per engine (tensor parallelism)")
+    parser.add_argument("--chunks", type=int, default=1, help="parts per engine, each saved as it finishes (resume)")
     parser.add_argument("--worker", type=int, default=-1, help=argparse.SUPPRESS)
     parser.add_argument("--num-workers", type=int, default=1, help=argparse.SUPPRESS)
     args = parser.parse_args()

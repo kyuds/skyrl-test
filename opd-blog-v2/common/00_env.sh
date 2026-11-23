@@ -47,6 +47,7 @@ export AIME25="$V2_DATA/aime25.parquet"
 # Written by data/prepare_sft.py: pretokenized SFT data (input_ids + loss_mask), parquet shards in a folder. 1a's
 # OpenThoughts-3 folder is named by 1-tml/sft.sh from its settings (sft_ot3_<domains>_<rows>).
 export SFT_2C="$V2_DATA/sft_2c_qwen3_32b_traces"    # 2c's warm-up: Qwen3-32B's correct answers to M2RL's math prompts
+export SFT_2G="$V2_DATA/sft_2g_qwen3_32b_traces_temperature_1"   # 2g's: the same, sampled at temperature 1.0
 mkdir -p "$LOGS" "$CKPT_ROOT" "$EXPORT_ROOT" "$V2_DATA" "$MODELS" "$JOBS" "$EVALS" "$TOOLS"
 
 echo "skyrl : $SKYRL_DIR @ $(git -C "$SKYRL_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')   kit: $(git -C "$V2_KIT" rev-parse --short HEAD 2>/dev/null || echo '?')"

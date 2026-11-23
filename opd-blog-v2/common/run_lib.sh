@@ -34,7 +34,7 @@ v2_init() {
     MATH_TRAIN="$V2_DATA/math_train.parquet"; MOPD_TRAIN="$V2_DATA/mopd_train.parquet"
     DEEPMATH_TRAIN="$V2_DATA/deepmath_train.parquet"
     AIME24="$V2_DATA/aime24.parquet"; AIME25="$V2_DATA/aime25.parquet"
-    SFT_2C="$V2_DATA/sft_2c_qwen3_32b_traces"
+    SFT_2C="$V2_DATA/sft_2c_qwen3_32b_traces"; SFT_2G="$V2_DATA/sft_2g_qwen3_32b_traces_temperature_1"
   else
     source "$V2_LIB_DIR/00_env.sh"
   fi

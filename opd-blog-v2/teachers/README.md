@@ -1,9 +1,9 @@
 # Teacher servers: OPD teachers on nodes of their own
 
-1b and MOPD score with teachers served from a node of their own, so each student has all 8 GPUs of its node: Qwen3-8B
-on h100-6 for 1b, the three M2RL experts on h100-2 for MOPD. Section 2's runs keep their teacher on 4 of their own
-node's 8 GPUs instead (`../2-alignment/README.md`), and expect the speed measured below for that layout: with three
-nodes left for 2a, 2b and 2d (then 2e and 2f, until 2026-11-23), one run per node finishes all three sooner than served
+1b and MOPD score with teachers served from a node of their own, so each student has all 8 GPUs of its node: Qwen3-8B on
+h100-6 for 1b, the three M2RL experts on h100-2 for MOPD. Section 2's runs keep their teacher on 4 of their own node's 8
+GPUs instead (`../2-alignment/README.md`), and expect the speed measured below for that layout: with three nodes left
+for 2a, 2b and 2d (then 2e and 2f, until 2026-11-23, then 2g), one run per node finishes all three sooner than served
 teachers would, which fit one run at a time on the two H100 nodes.
 
 ## Why
