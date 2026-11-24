@@ -55,9 +55,10 @@ students take all 8 GPUs of theirs ([`teachers/`](teachers/README.md)): 1b on b2
 until it was preempted on 2026-11-13; the RL teachers moved to h100-2 in exchange), MOPD on h100-4 with the RL teachers
 on h100-2. Section 2's runs keep their teacher on 4 of their own node's 8 GPUs, so after MOPD each of the three nodes
 left runs one: 2a on h100-4, 2b on b200-2 after 2c, and on h100-2 2d, then 2e and 2f (all three stopped on 2026-11-23),
-then 2g. h100-1, h100-3, h100-5 and h100-7 have no jobs left. b200-1 exists only as a snapshot since its zone ran out on
-2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand with `orchestrate.sh run <stage>`. A stage
-is not a barrier: each job waits only for its own deps (`config.sh`), and 1a's SFT keeps running through stage 2.
+then 2g, with h100-7 drawing half of 2g's answers. h100-1, h100-3 and h100-5 have no jobs left. b200-1 exists only as a
+snapshot since its zone ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand with
+`orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and 1a's SFT
+keeps running through stage 2.
 
 | Node | Stage 1: evals, data, SFT (no deps) | Stage 2: OPD, once its evals are done | Stage 3: after 1a; MOPD |
 |---|---|---|---|
@@ -68,6 +69,7 @@ is not a barrier: each job waits only for its own deps (`config.sh`), and 1a's S
 | h100-3 | eval: Qwen3-8B on AIME | | |
 | h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `opd_2a` (RL_Math), its eval | `mopd_3`, then all six benchmarks |
 | h100-6 | | served Qwen3-8B to 1b (2026-11-13 to 14) | |
+| h100-7 | | the back half of 2g's answers, by hand (`2-alignment/second_node.py`) | |
 
 What each OPD run waits for:
 
@@ -105,10 +107,10 @@ use). Those are estimates. Measured on 2026-11-18 to 20, an OPD step takes about
 served from h100-2), so a 250-step run takes about 4 days and MOPD's 300 steps about 5. 2a and 2d ran 2c's layout on
 H100s: their steps took about 34 minutes on 2026-11-21 to 22, so about 6 days for 250 steps. A warm-up SFT took an hour
 on h100-2 (2e's 25 steps; 2f's 14, on shorter answers, took 18 minutes; 2c's 25 took 44 on b200-2). Qwen3-32B's answers
-took 8.5 hours on b200-2 (8 engines of 1 GPU); 2g's, on h100-2's 4 engines of 2 GPUs, are estimated at about a day. The
-in-training AIME eval runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s, roughly 10 hours over a
-250-step run (estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in each run script change
-it.
+took 8.5 hours on b200-2 (8 engines of 1 GPU); 2g's, on h100-2 and h100-7 (4 engines of 2 GPUs each), are estimated at
+about half a day. The in-training AIME eval runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s,
+roughly 10 hours over a 250-step run (estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in
+each run script change it.
 
 ## Running it
 

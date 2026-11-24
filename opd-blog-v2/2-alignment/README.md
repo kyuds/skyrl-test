@@ -161,9 +161,13 @@ it is right as often as M2RL-SFT is at 0.6 (53% against 52%) and loops less (0.3
 sampling it sharply, not from what its answers teach. 2g's student learns Qwen3-32B's own distribution, so at the eval's
 temperature 0.6 it should sample as 2c's does at 1.0 (ASSUMED: the hypothesis 2g tests), and its OPD scores the
 distribution it was warmed up toward. Not done instead: evaluating at temperature 1.0, since M2RL's numbers and every
-other run's are at 0.6. 2g's answers are its own (`sft_2g_qwen3_32b_traces_temperature_1`), drawn on h100-2's 4 engines
-of 2 GPUs: 2c's took 8.5 hours on b200-2's 8 engines of 1 GPU, so about a day is expected (an estimate). `traces.sh`
-saves each engine's answers in 8 parts, so a preemption loses at most one. Its OPD is screened as 2e's and 2f's were.
+other run's are at 0.6. 2g's answers are its own (`sft_2g_qwen3_32b_traces_temperature_1`), drawn on h100-2 and h100-7
+together, 4 engines of 2 GPUs each: `traces.sh` on h100-2 saves each engine's answers in 8 parts, front to back, and
+h100-7 samples the back 4 parts of every engine's share by hand ([`second_node.py`](second_node.py) `split`, then
+`0-evals/generate.py`). Once both halves are done, h100-2's job is stopped, `second_node.py merge` adds h100-7's answers
+to its saved parts, and the job, started again, finds them all saved and goes on to grading. 2c's took 8.5 hours on
+b200-2's 8 engines of 1 GPU, so about half a day is expected (an estimate); a preemption loses at most one part. Its OPD
+is screened as 2e's and 2f's were.
 
 ## 2d's clip
 
