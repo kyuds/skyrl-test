@@ -1,10 +1,11 @@
 # Teacher servers: OPD teachers on nodes of their own
 
-1b and MOPD score with teachers served from a node of their own, so each student has all 8 GPUs of its node: Qwen3-8B on
-h100-6 for 1b, the three M2RL experts on h100-2 for MOPD. Section 2's runs keep their teacher on 4 of their own node's 8
-GPUs instead (`../2-alignment/README.md`), and expect the speed measured below for that layout: with three nodes left
-for 2a, 2b and 2d (then 2e and 2f, until 2026-11-23, then 2g), one run per node finishes all three sooner than served
-teachers would, which fit one run at a time on the two H100 nodes.
+1b, MOPD and 2g score with teachers served from a node of their own, so each student has all 8 GPUs of its node:
+Qwen3-8B on h100-6 for 1b, the three M2RL experts on h100-2 for MOPD, Qwen3-32B on h100-7 for 2g. Section 2's other runs
+keep their teacher on 4 of their own node's 8 GPUs instead (`../2-alignment/README.md`), and expect the speed measured
+below for that layout: with three nodes left for 2a, 2b and 2d (then 2e and 2f, until 2026-11-23), one run per node
+finishes all three sooner than served teachers would, which fit one run at a time on the two H100 nodes. 2g got a
+teacher node when h100-7, started to draw half of its answers, was free again.
 
 ## Why
 
@@ -36,6 +37,7 @@ Ruled out:
 | M2RL-RL_Math | h100-2 | 31001 | 4 × 1 | MOPD's math rows |
 | M2RL-RL_Coding | h100-2 | 31002 | 2 × 1 | MOPD's code rows |
 | M2RL-RL_IF | h100-2 | 31003 | 2 × 1 | MOPD's IF rows |
+| Qwen3-32B | h100-7 | 31004 | 4 × 2 | 2g (student on h100-2) |
 
 Each served teacher scores up to 18,433 tokens (`V2_TEACHER_MAX_LEN`), sections 2 and 3's 2,048-token prompt and
 16,384-token answer plus one.
@@ -70,8 +72,9 @@ Stop a server with `orchestrate.sh stop h100-2`. Start it again with `orchestrat
 
 ## What could go wrong
 
-- **A teacher node stops its runs.** If h100-2 is preempted, MOPD fails on its next teacher request once the retries
-  run out; if h100-6 is, 1b does. Each resumes from its last checkpoint (every 5 steps) once the server is back:
+- **A teacher node stops its runs.** If h100-2 is preempted, MOPD fails on its next teacher request once the retries run
+  out; if h100-6 is, 1b does; if h100-7 is, 2g does. Each resumes from its last checkpoint (every 5 steps) once the
+  server is back:
   1. Restart the node: `gcp/02_setup_nodes.sh --only <node>`, or `gcp/migrate.sh` if its zone has no capacity.
   2. Start its server: `orchestrate.sh run 2 --only <node> --yes`.
   3. Rerun the failed runs with `orchestrate.sh run 2 --yes`.

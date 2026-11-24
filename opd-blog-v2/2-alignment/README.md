@@ -53,7 +53,7 @@ same block with three.
 | Setting | Value | Source |
 |---|---|---|
 | Student | `Jackwang111/M2RL-SFT`; for 2c, 2e, 2f and 2g, the output of its warm-up | the proposal |
-| Teacher | 2a: `Jackwang111/M2RL-RL_Math`, 4 engines × 1 GPU. 2b to 2g: `Qwen/Qwen3-32B`, thinking, 2 engines × 2 GPUs on H100s (4 × 1 on B200s) | the proposal |
+| Teacher | 2a: `Jackwang111/M2RL-RL_Math`, 4 engines × 1 GPU. 2b to 2g: `Qwen/Qwen3-32B`, thinking, 2 engines × 2 GPUs on H100s (4 × 1 on B200s); 2g's served from h100-7, 4 × 2 | the proposal |
 | Prompts | M2RL's math set, 22,056 (`../data/README.md`), up to 2,048 tokens | [paper] appendix A; [script] `--rollout-max-prompt-len 2048` |
 | Batch | 256 prompts × 4 samples, one update per step | [paper]: batch size 256, group size 4, "gradient update is conducted per 1024 rollouts"; [script] |
 | Steps | 250 | fewer than [script] `--num-rollout 400` and the paper's appendix A (300), to save GPU time: 2c's in-training AIME was flat from about step 110. 2c was launched with a limit of 400 and resumed with 250 at step 210; the learning rate is constant, so it trains as a 250-step run would |
@@ -67,10 +67,12 @@ same block with three.
 | In-training eval | AIME 2024 and 2025, 8 samples, 32,768 tokens, temperature 0.6, top-p 0.95, every 5 steps | this kit's, at M2RL's eval settings (`../0-evals`) |
 
 Infrastructure: one node per run, 4 GPUs for the student (training and generation colocated) and 4 for its teacher:
-RL_Math on 4 engines of 1 GPU for 2a (h100-4); Qwen3-32B on 2 engines of 2 GPUs for 2d, 2e, 2f and 2g (h100-2), and on
-4 engines of 1 GPU on b200-2 for 2c and then 2b. That puts three runs on the three nodes left after MOPD at once; with
-served teachers, the two H100 nodes would fit one run at a time. Micro-batch 1; checkpoints every 5 steps (the last 2 kept),
-exports every 50, and the last export goes to the Hub.
+RL_Math on 4 engines of 1 GPU for 2a (h100-4); Qwen3-32B on 2 engines of 2 GPUs for 2d, 2e and 2f (h100-2), and on 4
+engines of 1 GPU on b200-2 for 2c and then 2b. That puts three runs on the three nodes left after MOPD at once; with
+served teachers, the two H100 nodes would fit one run at a time. 2g is the exception: h100-7, started to draw half of
+its answers, then serves its Qwen3-32B (4 engines of 2 GPUs, `../teachers/`), so its student has all 8 of h100-2's GPUs.
+The recipe is the same; only the layout differs, as between 2c's B200 and 2e's H100s. Micro-batch 1; checkpoints every 5
+steps (the last 2 kept), exports every 50, and the last export goes to the Hub.
 
 ## 2c's warm-up
 

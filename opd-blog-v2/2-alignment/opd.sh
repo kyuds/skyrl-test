@@ -67,6 +67,9 @@ EVAL_TOP_K=-1                      # none given
 # ---- infrastructure, not hyperparameters ----
 STUDENT_GPUS=4                     # half the node; the teacher runs on the other half (below). One node per run, so
                                    # section 2's runs share the three nodes left (config.sh)
+if [[ $variant == 2g ]]; then      # 2g: the whole node; its teacher is served from h100-7 (config.sh,
+  STUDENT_GPUS=8                   # V2_TEACHER_SERVERS, ../teachers/)
+fi
 MICRO=1                            # sequences per GPU per micro-batch
 # =====================================================================================
 
@@ -91,7 +94,11 @@ if [[ $variant == 2g ]]; then EXTRA_TAGS=",'warmup-temperature-1','warmup-traces
 
 v2_collect < <(
   v2_opd_recipe
-  v2_teacher "$TEACHER" $(((8 - STUDENT_GPUS) / TEACHER_TP)) "$TEACHER_TP"
+  if [[ $variant == 2g ]]; then
+    v2_remote_teacher trainer.teacher qwen3_32b   # $TEACHER, served (../teachers/)
+  else
+    v2_teacher "$TEACHER" $(((8 - STUDENT_GPUS) / TEACHER_TP)) "$TEACHER_TP"
+  fi
   v2_bookkeeping "['opd','section2','$variant','nemotron3-nano-rl-math','teacher:${TEACHER#*/}'$EXTRA_TAGS]"
   printf '%s\n' ${EXTRA_OPD[@]+"${EXTRA_OPD[@]}"}
 )
