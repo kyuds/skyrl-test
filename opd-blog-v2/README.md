@@ -21,7 +21,7 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
    2c with a light warm-up at a fifth of the learning rate (stopped at OPD step 2: its student was 2c's again); 2f, 2c
    with a warm-up on only its answers of at most 8,192 tokens (stopped at OPD step 1: its student looped less than 2c's
    but was right less often); 2g, 2c with a warm-up on Qwen3-32B's answers sampled at temperature 1.0, as OPD samples
-   (stopped at OPD step 1: its student looped half as often as 2c's, still too often).
+   (failed the screen at OPD step 1, its student looping half as often as 2c's; run to the end anyway).
    [`2-alignment`](2-alignment/README.md)
 3. **Most people use MOPD.** M2RL-SFT distilled from M2RL's math, code and instruction-following experts at once,
    against each expert's published number. No teacher is trained. [`3-mopd`](3-mopd/README.md)
@@ -33,7 +33,7 @@ came from, and in a table with links in that folder's README.** Nothing in `comm
 - 5 SFTs: 1a (8B), the warm-ups of 2c, 2e, 2f and 2g (4B).
 - 1 OPD run with an 8B student and Qwen3-8B as teacher: 1b.
 - 7 OPD runs with a 4B student (M2RL-SFT): 2a from M2RL-RL_Math (4B), and 2b, 2c, 2d (stopped at step 56), 2e
-  (stopped at step 2), 2f (stopped at step 1), 2g (stopped at step 1) from Qwen3-32B.
+  (stopped at step 2), 2f (stopped at step 1), 2g from Qwen3-32B.
 - 1 MOPD run, from three 4B teachers.
 - Plus evals of 7 published models and of every result.
 
@@ -56,18 +56,17 @@ students take all 8 GPUs of theirs ([`teachers/`](teachers/README.md)): 1b on b2
 until it was preempted on 2026-11-13; the RL teachers moved to h100-2 in exchange), MOPD on h100-4 with the RL teachers
 on h100-2. Section 2's runs keep their teacher on 4 of their own node's 8 GPUs, so after MOPD each of the three nodes
 left runs one: 2a on h100-4, 2b on b200-2 after 2c, and on h100-2 2d, then 2e and 2f (all three stopped on 2026-11-23),
-then 2g (stopped on 2026-11-24), with h100-7 drawing half of 2g's answers and then serving its teacher, so 2g's student
-has all 8 of h100-2's GPUs. h100-1, h100-3 and h100-5 have no jobs left. b200-1 exists only as a snapshot since its zone
-ran out on 2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand with
-`orchestrate.sh run <stage>`. A stage is not a barrier: each job waits only for its own deps (`config.sh`), and 1a's SFT
-keeps running through stage 2.
+then 2g, with h100-7 drawing half of 2g's answers and then serving its teacher, so 2g's student has all 8 of h100-2's
+GPUs. h100-1, h100-3 and h100-5 have no jobs left. b200-1 exists only as a snapshot since its zone ran out on
+2026-11-11, so its jobs moved to b200-2. Three stages, each started by hand with `orchestrate.sh run <stage>`. A stage
+is not a barrier: each job waits only for its own deps (`config.sh`), and 1a's SFT keeps running through stage 2.
 
 | Node | Stage 1: evals, data, SFT (no deps) | Stage 2: OPD, once its evals are done | Stage 3: after 1a; MOPD |
 |---|---|---|---|
 | b200-1 | `sft_1a`: Qwen3-8B-Base on OpenThoughts-3 (about 1 day) | (still 1a) | eval of 1a, `opd_1b`, its eval |
 | b200-2 | eval: Qwen3-32B on AIME; then `traces_2c`: its answers for 2c | `sft_2c` warm-up; 1a's and 1b's evals at Thinking Machines' sampling; `opd_2c`, its eval; `opd_2b` (Qwen3-32B), its eval | |
 | h100-1 | eval: M2RL-SFT on AIME | | |
-| h100-2 | eval: M2RL-RL_Math on AIME | `opd_2d` (Qwen3-32B, clipped; stopped at step 56); `sft_2e`, `opd_2e` (stopped at step 2); `sft_2f`, `opd_2f` (stopped at step 1); eval of 2c's warm-up student at temperature 1.0; `traces_2g`: Qwen3-32B's answers at temperature 1.0, `sft_2g`, `opd_2g` (stopped at step 1) | serves RL_Math, RL_Coding and RL_IF to MOPD |
+| h100-2 | eval: M2RL-RL_Math on AIME | `opd_2d` (Qwen3-32B, clipped; stopped at step 56); `sft_2e`, `opd_2e` (stopped at step 2); `sft_2f`, `opd_2f` (stopped at step 1); eval of 2c's warm-up student at temperature 1.0; `traces_2g`: Qwen3-32B's answers at temperature 1.0, `sft_2g`, `opd_2g`, its eval | serves RL_Math, RL_Coding and RL_IF to MOPD |
 | h100-3 | eval: Qwen3-8B on AIME | | |
 | h100-4 | evals: M2RL-SFT, RL_Coding, RL_IF on LiveCodeBench, IFEval, IFBench | `opd_2a` (RL_Math), its eval | `mopd_3`, then all six benchmarks |
 | h100-6 | | served Qwen3-8B to 1b (2026-11-13 to 14) | |
@@ -110,10 +109,10 @@ served from h100-2), so a 250-step run takes about 4 days and MOPD's 300 steps a
 H100s: their steps took about 34 minutes on 2026-11-21 to 22, so about 6 days for 250 steps. A warm-up SFT took an hour
 on h100-2 (2e's 25 steps; 2f's 14, on shorter answers, took 18 minutes; 2c's 25 took 44 on b200-2). Qwen3-32B's answers
 took 8.5 hours on b200-2 (8 engines of 1 GPU); 2g's, on h100-2 and h100-7 (4 engines of 2 GPUs each), took about 11
-hours (2026-11-23/24). 2g's OPD, with 8 student GPUs and its teacher served from h100-7, took 24 minutes for its one
-step (2026-11-24). The in-training AIME eval runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s,
-roughly 10 hours over a 250-step run (estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in
-each run script change it.
+hours (2026-11-23/24). 2g's OPD, with 8 student GPUs and its teacher served from h100-7, took 24 minutes for step 1
+(2026-11-24). The in-training AIME eval runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s, roughly
+10 hours over a 250-step run (estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in each
+run script change it.
 
 ## Running it
 
@@ -251,7 +250,8 @@ a day or two more. With 6 H100s there is nothing for the extra two to do.
   tokens (2f), nor answers sampled at temperature 1.0 (2g) repaired it. 2e and 2f keep 2c's answers, sampled from
   Qwen3-32B at temperature 0.6, top-p 0.95 and top-k 20. Sampled at temperature 1.0, 2c's warm-up student loops on 0.3%
   of its eval answers (26% at 0.6); 2g, warmed up on answers sampled at 1.0, looped on 14% at the eval's 0.6: half of
-  2c's, still above the screen's 5% ([`2-alignment/README.md`](2-alignment/README.md), "Repairing 2c's warm-up").
+  2c's, still above the screen's 5%; it runs to the end anyway, against 2c
+  ([`2-alignment/README.md`](2-alignment/README.md), "Repairing 2c's warm-up").
 - **The critical path is long and single.** If 1a fails late, 1b moves by a day. Its checkpoints every 250 steps
   bound a preemption's cost to about 1.5 hours.
 - **Section 1's learning rates are the cookbook's**, with no warmup: 1e-4 for the SFT, 5e-5 for full-FT OPD.

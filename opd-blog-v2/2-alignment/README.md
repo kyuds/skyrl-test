@@ -18,8 +18,8 @@ Then fixes for 2b, with the same teacher:
 - **2f, short-answer warm-up:** 2c with its warm-up on only the answers of at most 8,192 tokens. Stopped at OPD
   step 1: its student looped less than 2c's but was right less often (same section).
 - **2g, warm-up on temperature-1.0 answers:** 2c with its warm-up on Qwen3-32B answers sampled as OPD samples
-  (temperature 1.0, top-p 1.0, no top-k), not at Qwen's thinking settings. Stopped at OPD step 1: its student looped
-  half as often as 2c's, still too often (same section).
+  (temperature 1.0, top-p 1.0, no top-k), not at Qwen's thinking settings. It failed the screen at OPD step 1 (its
+  student looped half as often as 2c's, still too often) and runs to the end anyway (same section).
 
 The student starts at 56.51/43.54 measured (M2RL Table 3: 56.04/51.30); both teachers leave 24 to 32 points to
 learn. Its AIME 2025 miss is its own behaviour: 21% of its answers there are a bare Python tool call, which scores
@@ -40,7 +40,7 @@ against 0.11 to RL_Math. Qwen3-32B's chat template renders the student's prompts
 | `eval_sft_2c_warmup_math_temperature_1` | 2 | h100-2 | 2c's warm-up student at temperature 1.0 (`../0-evals`) |
 | `traces_2g_qwen3_32b_temperature_1` | 2 | h100-2 | 2g's warm-up data: Qwen3-32B's answers at temperature 1.0 |
 | `sft_2g_m2rl_sft_warmup_temperature_1` | 2 | h100-2 | 2g's warm-up SFT |
-| `opd_2g_m2rl_warmup_temperature_1_from_qwen3_32b` | 2 | h100-2 | 2g, stopped at OPD step 1 on 2026-11-24 |
+| `opd_2g_m2rl_warmup_temperature_1_from_qwen3_32b` | 2 | h100-2 | 2g: failed the screen at step 1, run to the end anyway (2026-11-24) |
 | `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-4 | 2a |
 | `eval_opd_2*_final` | | | each run's last export at 64 samples, M2RL's settings |
 
@@ -170,11 +170,14 @@ of 2 GPUs each: `traces.sh` on h100-2 saves each engine's answers in 8 parts, fr
 both halves are done, h100-2's job is stopped, `second_node.py merge` adds h100-7's answers to its saved parts, and the
 job, started again, finds them all saved and goes on to grading. 2c's took 8.5 hours on b200-2's 8 engines of 1 GPU;
 2g's, about 11 hours on the two nodes (2026-11-23/24). A preemption loses at most one part. Its OPD was screened as 2e's
-and 2f's were, and did not pass, though it came closer. Stopped at OPD step 1 on 2026-11-24, its student looped on 14%
-of its step-0 eval answers against 2c's 26%, ran to the limit on 25% against 34%, and was right on 47% against 45%
-(M2RL-SFT: 52%); its reverse KL was 2c's (0.196) and its entropy higher (0.55 against 0.39; M2RL-SFT 0.67). So the
-sharpened answers account for part of 2c's loops, roughly half by this count, not all. 2g's warm-up is on the Hub
-(`sft_2g_m2rl_sft_warmup_temperature_1`).
+and 2f's were, and did not pass, though it came closer. At OPD step 1 (2026-11-24) its student looped on 14% of its
+step-0 eval answers against 2c's 26%, ran to the limit on 25% against 34%, and was right on 47% against 45% (M2RL-SFT:
+52%); its reverse KL was 2c's (0.196) and its entropy higher (0.55 against 0.39; M2RL-SFT 0.67). So the sharpened
+answers account for part of 2c's loops, roughly half by this count, not all. 2g runs to step 250 anyway, on Daniel's
+call (2026-11-24): it starts nearer M2RL-SFT than 2c did, and 2c's OPD repaired its own loops by step 75, so the two
+runs show whether a cleaner start ends higher. The attempt screened was stopped at step 1 and kept on W&B as
+`opd_2g_m2rl_warmup_temperature_1_from_qwen3_32b_screen_attempt`; the run restarted from step 0. 2g's warm-up is on the
+Hub (`sft_2g_m2rl_sft_warmup_temperature_1`).
 
 ## 2d's clip
 
