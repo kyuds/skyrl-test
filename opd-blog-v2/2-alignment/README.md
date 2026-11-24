@@ -18,7 +18,8 @@ Then fixes for 2b, with the same teacher:
 - **2f, short-answer warm-up:** 2c with its warm-up on only the answers of at most 8,192 tokens. Stopped at OPD
   step 1: its student looped less than 2c's but was right less often (same section).
 - **2g, warm-up on temperature-1.0 answers:** 2c with its warm-up on Qwen3-32B answers sampled as OPD samples
-  (temperature 1.0, top-p 1.0, no top-k), not at Qwen's thinking settings (same section).
+  (temperature 1.0, top-p 1.0, no top-k), not at Qwen's thinking settings. Stopped at OPD step 1: its student looped
+  half as often as 2c's, still too often (same section).
 
 The student starts at 56.51/43.54 measured (M2RL Table 3: 56.04/51.30); both teachers leave 24 to 32 points to
 learn. Its AIME 2025 miss is its own behaviour: 21% of its answers there are a bare Python tool call, which scores
@@ -39,7 +40,7 @@ against 0.11 to RL_Math. Qwen3-32B's chat template renders the student's prompts
 | `eval_sft_2c_warmup_math_temperature_1` | 2 | h100-2 | 2c's warm-up student at temperature 1.0 (`../0-evals`) |
 | `traces_2g_qwen3_32b_temperature_1` | 2 | h100-2 | 2g's warm-up data: Qwen3-32B's answers at temperature 1.0 |
 | `sft_2g_m2rl_sft_warmup_temperature_1` | 2 | h100-2 | 2g's warm-up SFT |
-| `opd_2g_m2rl_warmup_temperature_1_from_qwen3_32b` | 2 | h100-2 | 2g |
+| `opd_2g_m2rl_warmup_temperature_1_from_qwen3_32b` | 2 | h100-2 | 2g, stopped at OPD step 1 on 2026-11-24 |
 | `opd_2a_m2rl_sft_from_m2rl_rl_math` | 2 | h100-4 | 2a |
 | `eval_opd_2*_final` | | | each run's last export at 64 samples, M2RL's settings |
 
@@ -116,16 +117,16 @@ Each repair changes one thing in 2c's warm-up and is screened before its 6-day O
 stopped there unless its student passes three checks against M2RL-SFT and 2c's: reverse KL at step 1 between 2c's
 0.19 and 2b's 0.54, at most about 5% looping answers at the step-0 eval, and at least M2RL-SFT's 52% right. A run that
 passes continues, and must not collapse at steps 20 to 30, where 2b's began. All three run on h100-2 (2 Qwen3-32B
-engines of 2 GPUs; 2c ran on b200-2 with 4 of 1 GPU): the same recipe, a different layout. 2e and 2f did not pass:
+engines of 2 GPUs; 2c ran on b200-2 with 4 of 1 GPU): the same recipe, a different layout. None of 2e, 2f and 2g passed:
 
-| At the start of OPD | M2RL-SFT | 2c (5e-5) | 2e (1e-5) | 2f (answers up to 8,192 tokens) |
-|---|---|---|---|---|
-| Reverse KL to Qwen3-32B, step 1 | 0.54 | 0.192 | 0.193 | 0.229 |
-| Step-0 eval: right / looping / at the token limit | 52% / 3% / 19% | 45% / 26% / 34% | 47% / 23% / 31% | 42% / 18% / 30% |
-| Policy entropy, step 1 | 0.67 | 0.39 | 0.39 | 0.41 |
-| Warm-up's SFT loss, step 3 / 6 / last | | 0.419 / 0.414 / 0.345 (25) | 0.554 / 0.407 / 0.356 (25) | 0.432 / 0.477 / 0.374 (14) |
+| At the start of OPD | M2RL-SFT | 2c (5e-5) | 2e (1e-5) | 2f (answers up to 8,192 tokens) | 2g (answers at temperature 1.0) |
+|---|---|---|---|---|---|
+| Reverse KL to Qwen3-32B, step 1 | 0.54 | 0.192 | 0.193 | 0.229 | 0.196 |
+| Step-0 eval: right / looping / at the token limit | 52% / 3% / 19% | 45% / 26% / 34% | 47% / 23% / 31% | 42% / 18% / 30% | 47% / 14% / 25% |
+| Policy entropy, step 1 | 0.67 | 0.39 | 0.39 | 0.41 | 0.55 |
+| Warm-up's SFT loss, step 3 / 6 / last | | 0.419 / 0.414 / 0.345 (25) | 0.554 / 0.407 / 0.356 (25) | 0.432 / 0.477 / 0.374 (14) | 0.604 / 0.583 / 0.484 (25) |
 
-Both keep 2c's answers, sampled from Qwen3-32B at Qwen's thinking settings (temperature 0.6, top-p 0.95, top-k 20,
+2e and 2f keep 2c's answers, sampled from Qwen3-32B at Qwen's thinking settings (temperature 0.6, top-p 0.95, top-k 20,
 `traces.sh`); 2g changes that sampling ("2g" below).
 
 **2e, the light warm-up: the learning rate, 1e-5 instead of 5e-5.** M2RL's 5e-5 is for answers from teachers RL'd from
@@ -161,15 +162,19 @@ temperature 0.6 sharpens it again; Qwen's model card warns that its models repea
 The two come from different harnesses (the in-training eval at 8 samples; `../0-evals` at 64) at the same length. At 1.0
 it is right as often as M2RL-SFT is at 0.6 (53% against 52%) and loops less (0.3% against 3%). So its loops come from
 sampling it sharply, not from what its answers teach. 2g's student learns Qwen3-32B's own distribution, so at the eval's
-temperature 0.6 it should sample as 2c's does at 1.0 (ASSUMED: the hypothesis 2g tests), and its OPD scores the
-distribution it was warmed up toward. Not done instead: evaluating at temperature 1.0, since M2RL's numbers and every
-other run's are at 0.6. 2g's answers are its own (`sft_2g_qwen3_32b_traces_temperature_1`), drawn on h100-2 and h100-7
-together, 4 engines of 2 GPUs each: `traces.sh` on h100-2 saves each engine's answers in 8 parts, front to back, and
-h100-7 samples the back 4 parts of every engine's share by hand ([`second_node.py`](second_node.py) `split`, then
-`0-evals/generate.py`). Once both halves are done, h100-2's job is stopped, `second_node.py merge` adds h100-7's answers
-to its saved parts, and the job, started again, finds them all saved and goes on to grading. 2c's took 8.5 hours on
-b200-2's 8 engines of 1 GPU; 2g's, about 11 hours on the two nodes (2026-11-23/24). A preemption loses at most one part. Its OPD
-is screened as 2e's and 2f's were.
+temperature 0.6 it should sample as 2c's does at 1.0 (the hypothesis 2g tested), and its OPD scores the distribution it
+was warmed up toward. Not done instead: evaluating at temperature 1.0, since M2RL's numbers and every other run's are at
+0.6. 2g's answers are its own (`sft_2g_qwen3_32b_traces_temperature_1`), drawn on h100-2 and h100-7 together, 4 engines
+of 2 GPUs each: `traces.sh` on h100-2 saves each engine's answers in 8 parts, front to back, and h100-7 samples the back
+4 parts of every engine's share by hand ([`second_node.py`](second_node.py) `split`, then `0-evals/generate.py`). Once
+both halves are done, h100-2's job is stopped, `second_node.py merge` adds h100-7's answers to its saved parts, and the
+job, started again, finds them all saved and goes on to grading. 2c's took 8.5 hours on b200-2's 8 engines of 1 GPU;
+2g's, about 11 hours on the two nodes (2026-11-23/24). A preemption loses at most one part. Its OPD was screened as 2e's
+and 2f's were, and did not pass, though it came closer. Stopped at OPD step 1 on 2026-11-24, its student looped on 14%
+of its step-0 eval answers against 2c's 26%, ran to the limit on 25% against 34%, and was right on 47% against 45%
+(M2RL-SFT: 52%); its reverse KL was 2c's (0.196) and its entropy higher (0.55 against 0.39; M2RL-SFT 0.67). So the
+sharpened answers account for part of 2c's loops, roughly half by this count, not all. 2g's warm-up is on the Hub
+(`sft_2g_m2rl_sft_warmup_temperature_1`).
 
 ## 2d's clip
 
@@ -238,8 +243,8 @@ On W&B `opd-blog-v2`, for 2a to 2d side by side:
 - **Qwen3-32B is the slowest teacher**: even a node of its own (4 engines of 2 GPUs) keeps 2b's steps
   longer than 2a's (`../teachers/README.md`). 2a shares RL_Math with MOPD (h100-2). If a teacher node is preempted, its runs fail and resume from their last checkpoint
   (`../teachers/README.md`).
-- **The warm-up recipe is borrowed, not tuned**: 2e and 2f each changed one thing in it, and neither repaired it;
-  2g changes the answers' sampling (above).
+- **The warm-up recipe is borrowed, not tuned**: 2e, 2f and 2g each changed one thing in it (the learning rate, the
+  answers' length, their sampling), and none repaired it (above).
 
 [paper]: https://arxiv.org/abs/2602.12566
 [script]: https://github.com/Mosi-AI/M2RL/blob/c94ce97ce7f2e0f2800e6dd8c20667f00ca223d4/M2RL/slime/scripts/multi_teacher_opd.sh#L66-L127
