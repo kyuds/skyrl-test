@@ -95,9 +95,9 @@ M2RL-SFT on teacher answers, the multi-teacher off-policy distillation (MT-OFF) 
 | Setting | Value | Source |
 |---|---|---|
 | Base | `Jackwang111/M2RL-SFT` | |
-| Data | the kept answers, one per prompt: 12,535 of the 22,056 prompts, 103M tokens, 8,252 per answer on average (measured 2026-11-11; Qwen3-32B was right on 50.2% of its 44,112 answers, and 25.4% hit the 16,384-token limit). 2f: only those of at most 8,192 tokens. 2g: its own | above; 2f and 2g: "Repairing 2c's warm-up" |
+| Data | the kept answers, one per prompt: 12,535 of the 22,056 prompts, 103M tokens, 8,252 per answer on average (measured 2026-11-11; Qwen3-32B was right on 50.2% of its 44,112 answers, and 25.4% hit the 16,384-token limit). 2f: only those of at most 8,192 tokens. 2g: its own, 12,448 prompts, 104.5M tokens, 8,397 per answer (measured 2026-11-24; right on 49.6% of 44,112, 26.8% at the limit) | above; 2f and 2g: "Repairing 2c's warm-up" |
 | Learning rate | 2c, 2f and 2g: 5e-5. 2e: 1e-5 | [paper] appendix A, MT-OFF. 2e: this kit's ("Repairing 2c's warm-up") |
-| Batch | 512, 1 epoch (25 steps for 2c and 2e, 14 for 2f; 2g's depend on how many of its answers are kept) | [paper] MT-OFF; the epoch count is ASSUMED |
+| Batch | 512, 1 epoch (25 steps for 2c, 2e and 2g, 14 for 2f) | [paper] MT-OFF; the epoch count is ASSUMED |
 | Warmup | 10% of the steps, then constant | [paper] appendix A, SFT ("10% training steps ... for learning rate warmup"); no decay is given, so constant is ASSUMED |
 | Optimizer | Adam, betas 0.9 and 0.98 (ASSUMED: not given for SFT, taken from [script]), weight decay 0.1 | [paper] appendix A, SFT |
 | Grad clip | 1.0 | [slime] default |
@@ -168,7 +168,7 @@ together, 4 engines of 2 GPUs each: `traces.sh` on h100-2 saves each engine's an
 h100-7 samples the back 4 parts of every engine's share by hand ([`second_node.py`](second_node.py) `split`, then
 `0-evals/generate.py`). Once both halves are done, h100-2's job is stopped, `second_node.py merge` adds h100-7's answers
 to its saved parts, and the job, started again, finds them all saved and goes on to grading. 2c's took 8.5 hours on
-b200-2's 8 engines of 1 GPU, so about half a day is expected (an estimate); a preemption loses at most one part. Its OPD
+b200-2's 8 engines of 1 GPU; 2g's, about 11 hours on the two nodes (2026-11-23/24). A preemption loses at most one part. Its OPD
 is screened as 2e's and 2f's were.
 
 ## 2d's clip
@@ -240,9 +240,6 @@ On W&B `opd-blog-v2`, for 2a to 2d side by side:
   (`../teachers/README.md`).
 - **The warm-up recipe is borrowed, not tuned**: 2e and 2f each changed one thing in it, and neither repaired it;
   2g changes the answers' sampling (above).
-- **2g's answers may be fewer and rougher.** At temperature 1.0 Qwen3-32B is likely right less often and runs to the
-  16,384-token limit more, so fewer prompts keep an answer (2c kept 12,535 of 22,056), and a smaller warm-up moves
-  the student less. `traces.sh` prints how many it kept.
 
 [paper]: https://arxiv.org/abs/2602.12566
 [script]: https://github.com/Mosi-AI/M2RL/blob/c94ce97ce7f2e0f2800e6dd8c20667f00ca223d4/M2RL/slime/scripts/multi_teacher_opd.sh#L66-L127

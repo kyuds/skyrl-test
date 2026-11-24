@@ -107,8 +107,8 @@ use). Those are estimates. Measured on 2026-11-18 to 20, an OPD step takes about
 served from h100-2), so a 250-step run takes about 4 days and MOPD's 300 steps about 5. 2a and 2d ran 2c's layout on
 H100s: their steps took about 34 minutes on 2026-11-21 to 22, so about 6 days for 250 steps. A warm-up SFT took an hour
 on h100-2 (2e's 25 steps; 2f's 14, on shorter answers, took 18 minutes; 2c's 25 took 44 on b200-2). Qwen3-32B's answers
-took 8.5 hours on b200-2 (8 engines of 1 GPU); 2g's, on h100-2 and h100-7 (4 engines of 2 GPUs each), are estimated at
-about half a day. 2g's OPD, with 8 student GPUs and its teacher served from h100-7, is estimated at 25 to 30 minutes a
+took 8.5 hours on b200-2 (8 engines of 1 GPU); 2g's, on h100-2 and h100-7 (4 engines of 2 GPUs each), took about
+11 hours (2026-11-23/24). 2g's OPD, with 8 student GPUs and its teacher served from h100-7, is estimated at 25 to 30 minutes a
 step. The in-training AIME eval runs every 5 steps at 8 samples: about 10 to 15 minutes each on 4 H100s, roughly 10
 hours over a 250-step run (estimated from vLLM's KV-cache limits, not measured). `EVAL_EVERY` and `EVAL_N` in each run
 script change it.
